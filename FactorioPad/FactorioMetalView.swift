@@ -80,11 +80,12 @@ final class FactorioHostUIView: UIView {
                 self?.setInputActive(true)
                 if Self.factorioStarted { self?.configureAudioSession() }
             })
-        lifecycleObservers.append(center.addObserver(forName: AVAudioSession.resumptionRecommendationNotification,
+        lifecycleObservers.append(center.addObserver(forName: AVAudioSession.interruptionNotification,
             object: AVAudioSession.sharedInstance(), queue: .main) { [weak self] notification in
-                guard let context = notification.userInfo?[AVAudioSession.resumptionContextKey]
-                    as? AVAudioSession.ResumptionContext,
-                    context.recommendation == .shouldResume,
+                guard let type = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                    type == AVAudioSession.InterruptionType.ended.rawValue,
+                    let options = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt,
+                    AVAudioSession.InterruptionOptions(rawValue: options).contains(.shouldResume),
                     UIApplication.shared.applicationState == .active else { return }
                 self?.configureAudioSession()
             })

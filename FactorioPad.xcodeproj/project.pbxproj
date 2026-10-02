@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 110;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -31,7 +31,7 @@
 		3A967F2230654B2200716585 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			dstPath = "";
-			dstSubfolder = Frameworks;
+			dstSubfolderSpec = 10;
 			files = (
 				3A967F1E30654B2200716585 /* FactorioCompat.framework in Embed Frameworks */,
 			);
@@ -40,7 +40,7 @@
 		3A967F2630654DEA00716585 /* Copy Files */ = {
 			isa = PBXCopyFilesBuildPhase;
 			dstPath = "";
-			dstSubfolder = Frameworks;
+			dstSubfolderSpec = 10;
 			files = (
 				3A967F2830654F1D00716585 /* FactorioGuest.framework in Copy Files */,
 			);
@@ -224,6 +224,7 @@
 				};
 			};
 			buildConfigurationList = 3A967EF7306543AB00716585 /* Build configuration list for PBXProject "FactorioPad" */;
+			compatibilityVersion = "Xcode 16.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -270,17 +271,7 @@
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/cacert.pem",
 			);
 			shellPath = /bin/sh;
-			shellScript = (
-				"set -eu",
-				": \"${PROJECT_DIR:?}\" \"${TARGET_BUILD_DIR:?}\" \"${UNLOCALIZED_RESOURCES_FOLDER_PATH:?}\"",
-				"SRC=\"${PROJECT_DIR}/Vendor/FactorioData\"",
-				"DST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/FactorioData\"",
-				"test -d \"${SRC}\"",
-				"mkdir -p \"${DST}\"",
-				"rsync -a --delete --exclude=.DS_Store --exclude=player-data.json --exclude=factorio-account.json \"${SRC}/\" \"${DST}/\"",
-				"cp \"${DST}/cacert.pem\" \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/cacert.pem\"",
-				"cp \"${PROJECT_DIR}/Tools/freeplay_control.lua\" \"${DST}/base/scenarios/freeplay/control.lua\"",
-			);
+			shellScript = "set -eu\n: \"${PROJECT_DIR:?}\" \"${TARGET_BUILD_DIR:?}\" \"${UNLOCALIZED_RESOURCES_FOLDER_PATH:?}\"\nSRC=\"${PROJECT_DIR}/Vendor/FactorioData\"\nDST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/FactorioData\"\ntest -d \"${SRC}\"\nmkdir -p \"${DST}\"\nrsync -a --delete --exclude=.DS_Store --exclude=player-data.json --exclude=factorio-account.json \"${SRC}/\" \"${DST}/\"\ncp \"${DST}/cacert.pem\" \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/cacert.pem\"\ncp \"${PROJECT_DIR}/Tools/freeplay_control.lua\" \"${DST}/base/scenarios/freeplay/control.lua\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -360,7 +351,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -418,7 +409,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -627,5 +618,4 @@
 /* End XCConfigurationList section */
 	};
 	rootObject = 3A967EF4306543AB00716585 /* Project object */;
-	validationLevel = 1;
 }

@@ -8,12 +8,12 @@ Play Factorio on iPhone and iPad with a gamepad or a physical keyboard and mouse
 
 ## What you need
 
-- A Mac with Xcode 27.
-- An iPhone or iPad with iOS 27 or iPadOS 27.
+- A Mac with Xcode 26 or later.
+- An iPhone or iPad with iOS 17 or iPadOS 17 or later.
 - A gamepad, or a physical keyboard and mouse.
 - `factorio.app` in `/Applications` on the Mac.
 
-FactorioPad was tested with Factorio 2.0.77 and a gamepad on an iPad mini (7th generation) and an iPhone 15 Pro. Other game versions are untested.
+FactorioPad was tested with Factorio 2.0.77 and a gamepad on an iPad mini (7th generation) and an iPhone 15 Pro. The project targets iOS 17+ and iPadOS 17+. Older versions are untested. Other game versions are untested.
 
 ## What changes on iPhone and iPad
 
