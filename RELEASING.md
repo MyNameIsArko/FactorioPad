@@ -2,12 +2,13 @@
 
 GitHub Actions builds the companions for Windows, macOS, and Linux.
 The workflow needs an existing `FactorioPad-template.ipa` attached to the release.
+The workflow attaches each companion archive to that release.
 
-1. Publish a GitHub release with `FactorioPad-template.ipa` attached.
+1. Create a draft GitHub release with `FactorioPad-template.ipa` attached.
 2. In the repository, open `Actions` and select `Build companion releases`.
-3. Click `Run workflow` and enter the release tag, such as `v1.1.0`.
-4. After all three builds pass, download the files under `Artifacts` on the workflow page.
-5. Extract those downloads and attach the companion archives inside them to the same GitHub release.
+3. Click `Run workflow` and enter the release tag, such as `v2.0.1`.
+4. Wait for all three builds to pass.
+5. Publish the draft release.
 
 The workflow creates these release files:
 

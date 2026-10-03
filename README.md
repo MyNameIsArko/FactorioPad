@@ -23,6 +23,14 @@ Save sharing is optional. Choose `Play without sync` to start without it.
 
 Keep your generated IPA private because it contains your Factorio executable.
 
+## Report a startup problem
+
+If the game stays black or stops during startup, open your selected `FactorioData` folder in Files.
+Attach `FactorioPad.log` to your GitHub issue.
+The log contains device details, startup steps, and game output.
+Each game launch replaces the log, so attach it before you reopen the app.
+If the selected folder does not allow writing, find `FactorioPad.log` in the app folder beside `README.txt`.
+
 ## What changes on iPhone and iPad
 
 - A gamepad uses mouse and keyboard controls. The right stick moves the pointer.

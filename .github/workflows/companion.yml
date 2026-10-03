@@ -9,7 +9,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -57,6 +57,12 @@ jobs:
       - name: Build the companion release on Linux
         if: runner.os == 'Linux'
         run: xvfb-run -a uv run --frozen python Tools/build_companion.py --template build-input/FactorioPad-template.ipa
+      - name: Attach the companion to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TEMPLATE_RELEASE: ${{ inputs.template_release }}
+        run: gh release upload "$TEMPLATE_RELEASE" dist/FactorioPad-Companion-* --repo "$GITHUB_REPOSITORY"
+        shell: bash
       - uses: actions/upload-artifact@v7
         with:
           name: FactorioPad-Companion-${{ matrix.platform }}

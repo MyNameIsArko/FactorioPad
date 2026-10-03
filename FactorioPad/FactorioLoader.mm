@@ -6,16 +6,54 @@
 #import <Foundation/Foundation.h>
 #include <dlfcn.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/utsname.h>
 #include <unistd.h>
 
 static NSString *const FactorioDataDirectoryName = @"FactorioPad";
 
+static void FactorioLog(NSString *message)
+{
+    fprintf(stderr, "[FactorioPad] %s\n", message.UTF8String);
+    fflush(stderr);
+}
+
+static BOOL FactorioStartLogging(NSString *dataPath, NSError **error)
+{
+    NSString *path = [dataPath stringByAppendingPathComponent:@"FactorioPad.log"];
+    int log = open(path.fileSystemRepresentation, O_WRONLY | O_CREAT | O_TRUNC | O_APPEND | O_NOFOLLOW, 0600);
+    if (log < 0) {
+        if (error) { *error = [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:nil]; }
+        return NO;
+    }
+    fflush(stdout);
+    fflush(stderr);
+    int originalOut = dup(STDOUT_FILENO);
+    int originalErr = dup(STDERR_FILENO);
+    BOOL ready = originalOut >= 0 && originalErr >= 0 &&
+        dup2(log, STDOUT_FILENO) >= 0 && dup2(log, STDERR_FILENO) >= 0;
+    int failure = errno;
+    if (!ready) {
+        if (originalOut >= 0) { dup2(originalOut, STDOUT_FILENO); }
+        if (originalErr >= 0) { dup2(originalErr, STDERR_FILENO); }
+        if (error) { *error = [NSError errorWithDomain:NSPOSIXErrorDomain code:failure userInfo:nil]; }
+    } else {
+        setvbuf(stdout, NULL, _IONBF, 0);
+        setvbuf(stderr, NULL, _IONBF, 0);
+    }
+    if (originalOut >= 0) { close(originalOut); }
+    if (originalErr >= 0) { close(originalErr); }
+    close(log);
+    return ready;
+}
+
 static void FactorioReportError(NSString *message)
 {
-    NSLog(@"[FactorioPad] %@", message);
+    FactorioLog(message);
     dispatch_async(dispatch_get_main_queue(), ^{
         [NSNotificationCenter.defaultCenter postNotificationName:@"FactorioStopped"
             object:nil userInfo:@{@"message": message}];
@@ -262,6 +300,7 @@ static BOOL FactorioPrepareSharedFolder(NSURL *documents, NSError **error)
     return [@"Open FactorioPad and choose your FactorioData folder. The app uses it without copying it.\n"
         "You can also copy FactorioData into this folder through Files or Apple Devices.\n"
         "Save sharing is optional and uses a separate folder.\n"
+        "If the game does not start, attach FactorioPad.log from your selected FactorioData folder to your issue.\n"
         writeToURL:readme atomically:YES encoding:NSUTF8StringEncoding error:error];
 }
 
@@ -408,7 +447,7 @@ static void *FactorioOpenFramework(NSString *name, int flags)
     dlerror();
     void *handle = dlopen(path.fileSystemRepresentation, flags);
     if (!handle) {
-        NSLog(@"[FactorioPad] Cannot load %@: %s", name, dlerror());
+        FactorioLog([NSString stringWithFormat:@"Cannot load %@: %s", name, dlerror()]);
         FactorioReportError([NSString stringWithFormat:@"Factorio cannot load %@. Close and reopen the app.", name]);
     }
     return handle;
@@ -477,6 +516,22 @@ static void *FactorioOpenFramework(NSString *name, int flags)
     BOOL threadStarted = NO;
     @try {
         NSString *readDataPath = dataURL.path;
+        NSError *logError = nil;
+        if (!FactorioStartLogging(readDataPath, &logError)) {
+            NSError *fallbackError = nil;
+            FactorioStartLogging([self documentsFolder].path, &fallbackError);
+            FactorioLog([NSString stringWithFormat:@"Cannot write the log in FactorioData: %@", logError.localizedDescription]);
+            if (fallbackError) { FactorioLog(fallbackError.localizedDescription); }
+        }
+        struct utsname device = {};
+        uname(&device);
+        FactorioLog([NSString stringWithFormat:@"Startup %@; FactorioPad %@ (%@); Factorio %@",
+            NSDate.date, NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"],
+            NSBundle.mainBundle.infoDictionary[@"CFBundleVersion"], guestVersion]);
+        FactorioLog([NSString stringWithFormat:@"Device: %s; OS: %@; Memory: %llu bytes; Viewport: %.0fx%.0f",
+            device.machine, NSProcessInfo.processInfo.operatingSystemVersionString,
+            NSProcessInfo.processInfo.physicalMemory, windowSize.width, windowSize.height]);
+        FactorioLog(@"Preparing game configuration");
         NSString *configPath = FactorioPrepareWritableData(readDataPath);
         if (!configPath) {
             return;
@@ -485,16 +540,19 @@ static void *FactorioOpenFramework(NSString *name, int flags)
         NSString *writeRoot = configPath.stringByDeletingLastPathComponent.stringByDeletingLastPathComponent;
         NSString *modsPath = [writeRoot stringByAppendingPathComponent:@"mods"];
 
+        FactorioLog(@"Loading FactorioCompat");
         void *compat = FactorioOpenFramework(@"FactorioCompat", RTLD_NOW | RTLD_GLOBAL);
         if (!compat) {
             return;
         }
 
+        FactorioLog(@"Loading FactorioGuest");
         void *guest = FactorioOpenFramework(@"FactorioGuest", RTLD_NOW | RTLD_LOCAL);
         if (!guest) {
             return;
         }
 
+        FactorioLog(@"Preparing input");
         if (!FactorioKeyboardBridgeSetGuestHandle(guest)) {
             FactorioReportError(@"This Factorio game file does not provide compatible input functions.");
             return;
@@ -506,7 +564,7 @@ static void *FactorioOpenFramework(NSString *name, int flags)
         dlerror();
         FactorioMainFunction factorioMain = (FactorioMainFunction)dlsym(guest, "main");
         if (!factorioMain) {
-            NSLog(@"[FactorioPad] Factorio main is missing: %s", dlerror());
+            FactorioLog([NSString stringWithFormat:@"Factorio main is missing: %s", dlerror()]);
             FactorioReportError(@"The Factorio game file is not compatible with this app.");
             return;
         }
@@ -533,7 +591,7 @@ static void *FactorioOpenFramework(NSString *name, int flags)
                 @try {
                     if (chdir(readDataPath.fileSystemRepresentation) != 0) {
                         int savedErrno = errno;
-                        NSLog(@"[FactorioPad] Cannot set the working directory: %s", strerror(savedErrno));
+                        FactorioLog([NSString stringWithFormat:@"Cannot set the working directory: %s", strerror(savedErrno)]);
                         FactorioReportError(@"Factorio cannot open its game folder.");
                         return;
                     }
@@ -557,6 +615,7 @@ static void *FactorioOpenFramework(NSString *name, int flags)
                         }
                     }
 
+                    FactorioLog(@"Starting Factorio main");
                     int result = factorioMain(argumentCount, argumentValues);
 
                     for (int index = 0; index < argumentCount; index++) {
@@ -564,7 +623,7 @@ static void *FactorioOpenFramework(NSString *name, int flags)
                     }
                     free(argumentValues);
 
-                    NSLog(@"[FactorioPad] Factorio stopped with status %d", result);
+                    FactorioLog([NSString stringWithFormat:@"Factorio stopped with status %d", result]);
                     FactorioControllerBridgeSetActive(NO);
                     FactorioReportError(result == 0 ? @"Factorio stopped. Close and reopen the app to play again."
                         : @"Factorio stopped because of an error. Close and reopen the app to try again.");

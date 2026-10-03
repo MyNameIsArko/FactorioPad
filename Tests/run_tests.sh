@@ -9,6 +9,9 @@ cd "$project_dir"
 xcrun clang++ -fobjc-arc -fblocks -IFactorioCompat -framework Foundation -framework CoreGraphics \
     Tests/test_config.mm -o "$test_dir/config"
 "$test_dir/config"
+xcrun clang++ -fobjc-arc -fblocks -IFactorioCompat -framework Foundation -framework CoreGraphics \
+    Tests/test_logging.mm -o "$test_dir/logging"
+"$test_dir/logging"
 xcrun swiftc FactorioPad/FactorioOnScreenKeyboard.swift Tests/test_keyboard.swift -o "$test_dir/keyboard"
 "$test_dir/keyboard"
 xcrun swiftc FactorioPad/FactorioMouseButtonSources.swift Tests/test_mouse_buttons.swift -o "$test_dir/mouse-buttons"
