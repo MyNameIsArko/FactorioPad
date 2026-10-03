@@ -5,10 +5,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="${FACTORIO_APP:-/Applications/factorio.app}"
 GAME_DATA="$APP/Contents/data"
 DESTINATION="$ROOT/Vendor/FactorioData"
-OUTPUT="$ROOT/dist/FactorioPad.ipa"
+OUTPUT="$ROOT/dist/FactorioPad-template.ipa"
 
-if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != '--prepare-only' ]; }; then
-    echo "Usage: bash Tools/build_ipa.sh [--prepare-only]" >&2
+if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != '--prepare-only' ] && [ "$1" != '--template' ]; }; then
+    echo "Usage: bash Tools/build_ipa.sh [--prepare-only|--template]" >&2
     exit 2
 fi
 
@@ -68,9 +68,16 @@ test -d "$PRODUCT/FactorioData/base"
 echo "iOS build complete. Packaging the IPA..."
 mkdir -p "$WORK/Payload"
 mv "$PRODUCT" "$WORK/Payload/FactorioPad.app"
-/usr/bin/ditto -c -k --keepParent "$WORK/Payload" "$WORK/FactorioPad.ipa"
+# Personal IPAs and separate game data are now prepared by the companion.
+rm -rf "$WORK/Payload/FactorioPad.app/FactorioData" \
+    "$WORK/Payload/FactorioPad.app/Frameworks/FactorioGuest.framework"
+/usr/bin/ditto --norsrc --noextattr -c -k --keepParent "$WORK/Payload" "$WORK/FactorioPad.ipa"
 /usr/bin/unzip -tq "$WORK/FactorioPad.ipa" >/dev/null
-mv -f "$WORK/FactorioPad.ipa" "$OUTPUT"
-
-echo "Unsigned IPA ready: $OUTPUT"
-echo "Install it through AltStore Classic or SideStore, which signs it with your Apple Account."
+python3 "$ROOT/Tools/package_ipa.py" template "$WORK/FactorioPad.ipa" "$WORK/FactorioPad-template.ipa"
+mv -f "$WORK/FactorioPad-template.ipa" "$OUTPUT"
+echo "App template ready: $OUTPUT"
+echo "The companion uses this same template on Windows, macOS, and Linux."
+python3 "$ROOT/Tools/build_companion.py" --template "$OUTPUT" --output "$WORK/FactorioPad-Companion-macOS-arm64.zip"
+mv -f "$WORK/FactorioPad-Companion-macOS-arm64.zip" "$ROOT/dist/FactorioPad-Companion-macOS-arm64.zip"
+echo "Upload this ZIP to GitHub Releases: $ROOT/dist/FactorioPad-Companion-macOS-arm64.zip"
+echo "Upload the template IPA, then run the companion workflow for the other platforms."

@@ -26,3 +26,6 @@ xcrun swiftc FactorioPad/FactorioControlsView.swift Tests/test_controls.swift -o
 xcrun swiftc FactorioPad/FactorioSaveSync.swift Tests/test_save_sync.swift -o "$test_dir/save-sync"
 "$test_dir/save-sync"
 python3 Tests/test_prepare_guest.py
+python3 Tests/test_package_ipa.py
+
+python3 Tests/test_companion.py

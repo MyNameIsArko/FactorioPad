@@ -1,0 +1,18 @@
+# Create a GitHub release
+
+GitHub Actions builds the companions for Windows, macOS, and Linux.
+The workflow needs an existing `FactorioPad-template.ipa` attached to the release.
+
+1. Publish a GitHub release with `FactorioPad-template.ipa` attached.
+2. In the repository, open `Actions` and select `Build companion releases`.
+3. Click `Run workflow` and enter the release tag, such as `v1.1.0`.
+4. After all three builds pass, download the files under `Artifacts` on the workflow page.
+5. Extract those downloads and attach the companion archives inside them to the same GitHub release.
+
+The workflow creates these release files:
+
+- `FactorioPad-Companion-Windows-x64.zip`
+- `FactorioPad-Companion-macOS-arm64.zip`
+- `FactorioPad-Companion-Linux-x64.tar.gz`
+
+Publish only the game-free template and companion archives. Keep personal IPAs and Factorio game files private.

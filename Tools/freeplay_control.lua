@@ -1,4 +1,4 @@
--- Xcode copies this file over the game's freeplay script when it builds the app.
+-- The build and packaging scripts copy this over the game's freeplay script.
 require('__base__/script/freeplay/control.lua')
 
 -- The iOS keyboard has no Tab key to dismiss the freeplay intro dialog.

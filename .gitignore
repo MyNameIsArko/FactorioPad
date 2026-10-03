@@ -9,6 +9,9 @@ factorio-account.json
 /FactorioPad/Assets.xcassets/AppIcon.appiconset/icon.png
 Vendor/
 dist/
+/build-input/
 *.ipa
+*.dmg
 *.xcarchive
 .zvec-grep/
+.venv/

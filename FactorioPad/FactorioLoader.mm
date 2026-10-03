@@ -217,6 +217,128 @@ static void FactorioCheckConfigUpdater(void)
 }
 #endif
 
+static NSString *FactorioDataProblem(NSString *path, NSString *guestVersion)
+{
+    NSFileManager *files = NSFileManager.defaultManager;
+    NSData *infoData = [NSData dataWithContentsOfFile:[path stringByAppendingPathComponent:@"base/info.json"]];
+    id info = infoData ? [NSJSONSerialization JSONObjectWithData:infoData options:0 error:nil] : nil;
+    NSString *version = [info isKindOfClass:NSDictionary.class] ? info[@"version"] : nil;
+    if (![version isKindOfClass:NSString.class] ||
+        ![files fileExistsAtPath:[path stringByAppendingPathComponent:@"core/info.json"]] ||
+        ![files fileExistsAtPath:[path stringByAppendingPathComponent:@"cacert.pem"]]) {
+        return @"Choose the FactorioData folder that contains base, core, and cacert.pem.";
+    }
+    if (!guestVersion.length || ![version isEqualToString:guestVersion]) {
+        return @"The game data and app executable use different Factorio versions. Package your matching Mac game files into a new IPA, then sideload it.";
+    }
+    return nil;
+}
+
+static NSString *FactorioReadDataPath(NSString *bundleRoot, NSString *documentsRoot,
+    NSString *guestVersion, NSString **message)
+{
+    NSString *path = [documentsRoot stringByAppendingPathComponent:@"FactorioData"];
+    if (![NSFileManager.defaultManager fileExistsAtPath:path]) {
+        path = [bundleRoot stringByAppendingPathComponent:@"FactorioData"];
+    }
+    *message = FactorioDataProblem(path, guestVersion);
+    return *message ? nil : path;
+}
+
+static NSError *FactorioGameDataError(NSString *message)
+{
+    return [NSError errorWithDomain:@"FactorioGameData" code:1
+        userInfo:@{NSLocalizedDescriptionKey: message}];
+}
+
+static BOOL FactorioPrepareSharedFolder(NSURL *documents, NSError **error)
+{
+    NSFileManager *files = NSFileManager.defaultManager;
+    if (![files createDirectoryAtURL:documents withIntermediateDirectories:YES attributes:nil error:error]) {
+        return NO;
+    }
+    NSURL *readme = [documents URLByAppendingPathComponent:@"README.txt"];
+    if ([files fileExistsAtPath:readme.path]) { return YES; }
+    return [@"Open FactorioPad and choose your FactorioData folder. The app uses it without copying it.\n"
+        "You can also copy FactorioData into this folder through Files or Apple Devices.\n"
+        "Save sharing is optional and uses a separate folder.\n"
+        writeToURL:readme atomically:YES encoding:NSUTF8StringEncoding error:error];
+}
+
+static NSString *const FactorioGameFolderBookmark = @"FactorioGameFolderBookmark";
+
+static BOOL FactorioSelectGameData(NSURL *source, NSUserDefaults *preferences, NSString *version, NSError **error)
+{
+    BOOL access = [source startAccessingSecurityScopedResource];
+    __block NSError *failure = nil;
+    __block NSData *bookmark = nil;
+    @try {
+        NSError *coordinationError = nil;
+        [[[NSFileCoordinator alloc] initWithFilePresenter:nil] coordinateReadingItemAtURL:source
+            options:0 error:&coordinationError byAccessor:^(NSURL *url) {
+                NSString *problem = FactorioDataProblem(url.path, version);
+                if (problem) { failure = FactorioGameDataError(problem); return; }
+                NSDirectoryEnumerator *entries = [NSFileManager.defaultManager enumeratorAtURL:url
+                    includingPropertiesForKeys:@[NSURLIsSymbolicLinkKey] options:0
+                    errorHandler:^BOOL(NSURL *item, NSError *readError) { failure = readError; return NO; }];
+                for (NSURL *item in entries) {
+                    NSNumber *link = nil;
+                    if (![item getResourceValue:&link forKey:NSURLIsSymbolicLinkKey error:&failure]) { return; }
+                    if (link.boolValue) {
+                        failure = FactorioGameDataError(@"Choose a game data folder without symbolic links.");
+                        return;
+                    }
+                }
+                if (!failure) {
+                    bookmark = [url bookmarkDataWithOptions:NSURLBookmarkCreationMinimalBookmark
+                        includingResourceValuesForKeys:nil relativeToURL:nil error:&failure];
+                }
+            }];
+        if (!failure) { failure = coordinationError; }
+        if (!bookmark || failure) { return NO; }
+        [preferences setObject:bookmark forKey:FactorioGameFolderBookmark];
+        return YES;
+    } @finally {
+        if (access) { [source stopAccessingSecurityScopedResource]; }
+        if (failure && error) { *error = failure; }
+    }
+}
+
+// The caller holds folder access until the game finishes reading its files.
+static NSURL *FactorioOpenGameData(NSUserDefaults *preferences, NSString *bundleRoot,
+    NSString *documentsRoot, NSString *version, BOOL *access, NSError **error)
+{
+    *access = NO;
+    NSData *bookmark = [preferences dataForKey:FactorioGameFolderBookmark];
+    if (!bookmark) {
+        NSString *message = nil;
+        NSString *path = FactorioReadDataPath(bundleRoot, documentsRoot, version, &message);
+        if (!path) { if (error) { *error = FactorioGameDataError(message); } return nil; }
+        return [NSURL fileURLWithPath:path isDirectory:YES];
+    }
+    BOOL stale = NO;
+    NSURL *url = [NSURL URLByResolvingBookmarkData:bookmark options:0 relativeToURL:nil
+        bookmarkDataIsStale:&stale error:error];
+    if (!url) { return nil; }
+    BOOL opened = [url startAccessingSecurityScopedResource];
+    BOOL ready = NO;
+    @try {
+        NSString *problem = FactorioDataProblem(url.path, version);
+        if (problem) { if (error) { *error = FactorioGameDataError(problem); } return nil; }
+        if (stale) {
+            NSData *updated = [url bookmarkDataWithOptions:NSURLBookmarkCreationMinimalBookmark
+                includingResourceValuesForKeys:nil relativeToURL:nil error:error];
+            if (!updated) { return nil; }
+            [preferences setObject:updated forKey:FactorioGameFolderBookmark];
+        }
+        ready = YES;
+        *access = opened;
+        return url;
+    } @finally {
+        if (opened && !ready) { [url stopAccessingSecurityScopedResource]; }
+    }
+}
+
 #ifndef FACTORIO_CONFIG_TEST
 static NSString *FactorioPrepareWritableData(NSString *readDataPath)
 {
@@ -294,115 +416,171 @@ static void *FactorioOpenFramework(NSString *name, int flags)
 
 @implementation FactorioLoader
 
++ (NSString *)guestVersion
+{
+    NSString *path = [NSBundle.mainBundle.privateFrameworksPath
+        stringByAppendingPathComponent:@"FactorioGuest.framework/Info.plist"];
+    return [NSDictionary dictionaryWithContentsOfFile:path][@"CFBundleShortVersionString"];
+}
+
++ (NSURL *)documentsFolder
+{
+    return [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
+}
+
++ (NSString *)gameDataProblem
+{
+    NSString *version = [self guestVersion];
+    if (!version.length) {
+        return @"This app template needs your Factorio executable. Use the packaging tool on your computer, then sideload the resulting IPA.";
+    }
+    // Ask older imports to select a folder once so the app can use it in place.
+    if (![NSUserDefaults.standardUserDefaults dataForKey:FactorioGameFolderBookmark] &&
+        [NSFileManager.defaultManager fileExistsAtPath:[[self documentsFolder].path stringByAppendingPathComponent:@"FactorioData"]]) {
+        return @"Choose your FactorioData folder.";
+    }
+    NSError *error = nil;
+    BOOL access = NO;
+    NSURL *url = FactorioOpenGameData(NSUserDefaults.standardUserDefaults,
+        NSBundle.mainBundle.bundlePath, [self documentsFolder].path, version, &access, &error);
+    if (access) { [url stopAccessingSecurityScopedResource]; }
+    return error.localizedDescription;
+}
+
++ (BOOL)prepareSharedGameFolderWithError:(NSError **)error
+{
+    return FactorioPrepareSharedFolder([self documentsFolder], error);
+}
+
++ (BOOL)selectGameDataFromURL:(NSURL *)url error:(NSError **)error
+{
+    return FactorioSelectGameData(url, NSUserDefaults.standardUserDefaults, [self guestVersion], error);
+}
+
 + (void)startWithWindowSize:(CGSize)windowSize
 {
     FactorioConfigureEnvironment();
 
-    NSString *readDataPath = [NSBundle.mainBundle.bundlePath
-        stringByAppendingPathComponent:@"FactorioData"];
-    BOOL isDirectory = NO;
-
-    if (![NSFileManager.defaultManager fileExistsAtPath:readDataPath isDirectory:&isDirectory] || !isDirectory) {
-        FactorioReportError(@"The app does not contain the Factorio game data.");
+    NSString *guestVersion = [self guestVersion];
+    if (!guestVersion.length) {
+        FactorioReportError(@"This app template needs your Factorio executable. Use the packaging script on your computer, then sideload the resulting IPA.");
         return;
     }
-
-    NSString *configPath = FactorioPrepareWritableData(readDataPath);
-    if (!configPath) {
+    NSError *dataError = nil;
+    BOOL access = NO;
+    NSURL *dataURL = FactorioOpenGameData(NSUserDefaults.standardUserDefaults,
+        NSBundle.mainBundle.bundlePath, [self documentsFolder].path, guestVersion, &access, &dataError);
+    if (!dataURL) {
+        FactorioReportError(dataError.localizedDescription);
         return;
     }
+    BOOL threadStarted = NO;
+    @try {
+        NSString *readDataPath = dataURL.path;
+        NSString *configPath = FactorioPrepareWritableData(readDataPath);
+        if (!configPath) {
+            return;
+        }
 
-    NSString *writeRoot = configPath.stringByDeletingLastPathComponent.stringByDeletingLastPathComponent;
-    NSString *modsPath = [writeRoot stringByAppendingPathComponent:@"mods"];
+        NSString *writeRoot = configPath.stringByDeletingLastPathComponent.stringByDeletingLastPathComponent;
+        NSString *modsPath = [writeRoot stringByAppendingPathComponent:@"mods"];
 
-    void *compat = FactorioOpenFramework(@"FactorioCompat", RTLD_NOW | RTLD_GLOBAL);
-    if (!compat) {
-        return;
-    }
+        void *compat = FactorioOpenFramework(@"FactorioCompat", RTLD_NOW | RTLD_GLOBAL);
+        if (!compat) {
+            return;
+        }
 
-    void *guest = FactorioOpenFramework(@"FactorioGuest", RTLD_NOW | RTLD_LOCAL);
-    if (!guest) {
-        return;
-    }
+        void *guest = FactorioOpenFramework(@"FactorioGuest", RTLD_NOW | RTLD_LOCAL);
+        if (!guest) {
+            return;
+        }
 
-    if (!FactorioKeyboardBridgeSetGuestHandle(guest)) {
-        FactorioReportError(@"This Factorio game file does not provide compatible input functions.");
-        return;
-    }
-    FactorioControllerBridgeStart();
-    FactorioControllerBridgeSetViewportSize(windowSize.width, windowSize.height);
+        if (!FactorioKeyboardBridgeSetGuestHandle(guest)) {
+            FactorioReportError(@"This Factorio game file does not provide compatible input functions.");
+            return;
+        }
+        FactorioControllerBridgeStart();
+        FactorioControllerBridgeSetViewportSize(windowSize.width, windowSize.height);
 
-    typedef int (*FactorioMainFunction)(int, char **);
-    dlerror();
-    FactorioMainFunction factorioMain = (FactorioMainFunction)dlsym(guest, "main");
-    if (!factorioMain) {
-        NSLog(@"[FactorioPad] Factorio main is missing: %s", dlerror());
-        FactorioReportError(@"The Factorio game file is not compatible with this app.");
-        return;
-    }
+        typedef int (*FactorioMainFunction)(int, char **);
+        dlerror();
+        FactorioMainFunction factorioMain = (FactorioMainFunction)dlsym(guest, "main");
+        if (!factorioMain) {
+            NSLog(@"[FactorioPad] Factorio main is missing: %s", dlerror());
+            FactorioReportError(@"The Factorio game file is not compatible with this app.");
+            return;
+        }
 
-    CGFloat width = MAX(windowSize.width, 1.0);
-    CGFloat height = MAX(windowSize.height, 1.0);
-    NSString *windowSizeArgument = [NSString stringWithFormat:@"%ldx%ld",
-        lround(width), lround(height)];
+        CGFloat width = MAX(windowSize.width, 1.0);
+        CGFloat height = MAX(windowSize.height, 1.0);
+        NSString *windowSizeArgument = [NSString stringWithFormat:@"%ldx%ld",
+            lround(width), lround(height)];
 
-    NSArray<NSString *> *arguments = @[
-        @"factorio",
-        @"--config", configPath,
-        @"--mod-directory", modsPath,
-        @"--no-log-rotation",
-        @"--force-metal",
-        @"--fullscreen=false",
-        @"--window-size", windowSizeArgument,
-        @"--nogamepad",
-        @"--single-thread-loading"
-    ];
+        NSArray<NSString *> *arguments = @[
+            @"factorio",
+            @"--config", configPath,
+            @"--mod-directory", modsPath,
+            @"--no-log-rotation",
+            @"--force-metal",
+            @"--fullscreen=false",
+            @"--window-size", windowSizeArgument,
+            @"--nogamepad",
+            @"--single-thread-loading"
+        ];
 
-    NSThread *thread = [[NSThread alloc] initWithBlock:^{
-        @autoreleasepool {
-            if (chdir(NSBundle.mainBundle.bundlePath.fileSystemRepresentation) != 0) {
-                int savedErrno = errno;
-                NSLog(@"[FactorioPad] Cannot set the working directory: %s", strerror(savedErrno));
-                FactorioReportError(@"Factorio cannot open its game folder.");
-                return;
-            }
+        NSThread *thread = [[NSThread alloc] initWithBlock:^{
+            @autoreleasepool {
+                @try {
+                    if (chdir(readDataPath.fileSystemRepresentation) != 0) {
+                        int savedErrno = errno;
+                        NSLog(@"[FactorioPad] Cannot set the working directory: %s", strerror(savedErrno));
+                        FactorioReportError(@"Factorio cannot open its game folder.");
+                        return;
+                    }
 
-            int argumentCount = (int)arguments.count;
-            char **argumentValues = (char **)calloc((size_t)argumentCount + 1, sizeof(char *));
-            if (!argumentValues) {
-                FactorioReportError(@"Factorio does not have enough memory to start.");
-                return;
-            }
+                    int argumentCount = (int)arguments.count;
+                    char **argumentValues = (char **)calloc((size_t)argumentCount + 1, sizeof(char *));
+                    if (!argumentValues) {
+                        FactorioReportError(@"Factorio does not have enough memory to start.");
+                        return;
+                    }
 
-            for (int index = 0; index < argumentCount; index++) {
-                argumentValues[index] = strdup(arguments[(NSUInteger)index].fileSystemRepresentation);
-                if (!argumentValues[index]) {
-                    for (int previous = 0; previous < index; previous++) {
-                        free(argumentValues[previous]);
+                    for (int index = 0; index < argumentCount; index++) {
+                        argumentValues[index] = strdup(arguments[(NSUInteger)index].fileSystemRepresentation);
+                        if (!argumentValues[index]) {
+                            for (int previous = 0; previous < index; previous++) {
+                                free(argumentValues[previous]);
+                            }
+                            free(argumentValues);
+                            FactorioReportError(@"Factorio does not have enough memory to start.");
+                            return;
+                        }
+                    }
+
+                    int result = factorioMain(argumentCount, argumentValues);
+
+                    for (int index = 0; index < argumentCount; index++) {
+                        free(argumentValues[index]);
                     }
                     free(argumentValues);
-                    FactorioReportError(@"Factorio does not have enough memory to start.");
-                    return;
+
+                    NSLog(@"[FactorioPad] Factorio stopped with status %d", result);
+                    FactorioControllerBridgeSetActive(NO);
+                    FactorioReportError(result == 0 ? @"Factorio stopped. Close and reopen the app to play again."
+                        : @"Factorio stopped because of an error. Close and reopen the app to try again.");
+                } @finally {
+                    if (access) { [dataURL stopAccessingSecurityScopedResource]; }
                 }
             }
+        }];
 
-            int result = factorioMain(argumentCount, argumentValues);
-
-            for (int index = 0; index < argumentCount; index++) {
-                free(argumentValues[index]);
-            }
-            free(argumentValues);
-
-            NSLog(@"[FactorioPad] Factorio stopped with status %d", result);
-            FactorioControllerBridgeSetActive(NO);
-            FactorioReportError(result == 0 ? @"Factorio stopped. Close and reopen the app to play again."
-                : @"Factorio stopped because of an error. Close and reopen the app to try again.");
-        }
-    }];
-
-    thread.name = @"FactorioMainThread";
-    thread.stackSize = 8 * 1024 * 1024;
-    [thread start];
+        thread.name = @"FactorioMainThread";
+        thread.stackSize = 8 * 1024 * 1024;
+        [thread start];
+        threadStarted = YES;
+    } @finally {
+        if (access && !threadStarted) { [dataURL stopAccessingSecurityScopedResource]; }
+    }
 }
 
 @end

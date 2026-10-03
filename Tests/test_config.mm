@@ -59,6 +59,81 @@ int main(void)
                 @"repeated launches must not change the configuration");
         }
         puts("Factorio configuration tests passed.");
+        NSString *temporary = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
+        NSString *bundle = [temporary stringByAppendingPathComponent:@"bundle"];
+        NSString *documents = [temporary stringByAppendingPathComponent:@"documents"];
+        NSString *bundledData = [bundle stringByAppendingPathComponent:@"FactorioData"];
+        NSString *copiedData = [documents stringByAppendingPathComponent:@"FactorioData"];
+        NSString *message = nil;
+        NSFileManager *files = NSFileManager.defaultManager;
+        NSCAssert(!FactorioReadDataPath(bundle, documents, @"2.0.77", &message), @"missing data must stop startup");
+        for (NSString *root in @[bundledData, copiedData]) {
+            for (NSString *folder in @[@"base", @"core"]) {
+                NSCAssert([files createDirectoryAtPath:[root stringByAppendingPathComponent:folder]
+                    withIntermediateDirectories:YES attributes:nil error:nil], @"create test folder");
+            }
+            [@"{\"version\":\"2.0.77\"}" writeToFile:[root stringByAppendingPathComponent:@"base/info.json"]
+                atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [@"{}" writeToFile:[root stringByAppendingPathComponent:@"core/info.json"]
+                atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [@"certificate" writeToFile:[root stringByAppendingPathComponent:@"cacert.pem"]
+                atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            NSCAssert([FactorioReadDataPath(bundle, documents, @"2.0.77", &message) isEqualToString:root],
+                @"copied data must take priority over bundled data");
+        }
+        NSCAssert(!FactorioReadDataPath(bundle, documents, @"2.0.78", &message), @"mismatched data must stop startup");
+        [@"[]" writeToFile:[copiedData stringByAppendingPathComponent:@"base/info.json"]
+            atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        NSCAssert(!FactorioReadDataPath(bundle, documents, @"2.0.77", &message),
+            @"invalid copied data must not silently fall back to bundled data");
+        NSURL *documentsURL = [NSURL fileURLWithPath:documents isDirectory:YES];
+        NSError *importError = nil;
+        NSCAssert(FactorioPrepareSharedFolder(documentsURL, &importError), @"shared folder setup must succeed");
+        NSCAssert([files fileExistsAtPath:[documents stringByAppendingPathComponent:@"README.txt"]],
+            @"Documents must contain a file on first launch");
+        NSCAssert(FactorioPrepareSharedFolder(documentsURL, &importError), @"repeated setup must succeed");
+        NSString *suite = [@"FactorioGameFolderTests-" stringByAppendingString:NSUUID.UUID.UUIDString];
+        NSUserDefaults *preferences = [[NSUserDefaults alloc] initWithSuiteName:suite];
+        NSURL *source = [NSURL fileURLWithPath:bundledData isDirectory:YES];
+        NSCAssert(FactorioSelectGameData(source, preferences, @"2.0.77", &importError),
+            @"a valid game folder must be remembered without copying");
+        NSData *savedBookmark = [preferences dataForKey:FactorioGameFolderBookmark];
+        NSCAssert(savedBookmark.length, @"selection must save a bookmark");
+        BOOL access = NO;
+        NSURL *opened = FactorioOpenGameData([[NSUserDefaults alloc] initWithSuiteName:suite],
+            bundle, documents, @"2.0.77", &access, &importError);
+        NSCAssert([opened.path.stringByResolvingSymlinksInPath isEqualToString:bundledData.stringByResolvingSymlinksInPath], @"startup must use the selected folder in place");
+        if (access) { [opened stopAccessingSecurityScopedResource]; }
+        NSCAssert(FactorioDataProblem(copiedData, @"2.0.77"), @"selection must not replace old copied data");
+        NSCAssert([files contentsOfDirectoryAtPath:documents error:nil].count == 2,
+            @"selection must not create copies or temporary folders");
+        NSCAssert(!FactorioSelectGameData(source, preferences, @"2.0.78", &importError),
+            @"a mismatched selection must fail");
+        NSCAssert([[preferences dataForKey:FactorioGameFolderBookmark] isEqual:savedBookmark],
+            @"failed selections must retain the previous bookmark");
+        NSString *link = [bundledData stringByAppendingPathComponent:@"outside-link"];
+        NSCAssert([files createSymbolicLinkAtPath:link withDestinationPath:@"/tmp" error:nil], @"create a test link");
+        NSCAssert(!FactorioSelectGameData(source, preferences, @"2.0.77", &importError),
+            @"selections must reject symbolic links");
+        NSCAssert([[preferences dataForKey:FactorioGameFolderBookmark] isEqual:savedBookmark],
+            @"rejected selections must retain the previous bookmark");
+        [files removeItemAtPath:link error:nil];
+        [@"{}" writeToFile:[bundledData stringByAppendingPathComponent:@"base/info.json"]
+            atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        NSCAssert(!FactorioOpenGameData(preferences, bundle, documents, @"2.0.77", &access, &importError),
+            @"invalid selected data must stop startup");
+        [@"{\"version\":\"2.0.77\"}" writeToFile:[copiedData stringByAppendingPathComponent:@"base/info.json"]
+            atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        [files removeItemAtURL:source error:nil];
+        NSCAssert(!FactorioOpenGameData(preferences, bundle, documents, @"2.0.77", &access, &importError),
+            @"a missing selected folder must not fall back to an old copy");
+        [preferences setObject:[@"invalid bookmark" dataUsingEncoding:NSUTF8StringEncoding]
+            forKey:FactorioGameFolderBookmark];
+        NSCAssert(!FactorioOpenGameData(preferences, bundle, documents, @"2.0.77", &access, &importError),
+            @"a damaged bookmark must report an error");
+        [preferences removePersistentDomainForName:suite];
+        [files removeItemAtPath:temporary error:nil];
+        puts("Factorio external data tests passed.");
     }
     return 0;
 }

@@ -1,72 +1,50 @@
 # FactorioPad
 
-Play Factorio on iPhone and iPad with a gamepad or a physical keyboard and mouse.
+Play Factorio on your iPhone or iPad. You need iOS 17 or iPadOS 17 or newer, plus a gamepad or a keyboard and mouse. Touch supports menus, but not touch-only gameplay.
 
-> [!IMPORTANT]
-> FactorioPad does not include the game. Download the Mac version from [factorio.com](https://factorio.com/download), not Steam.
-> Install `factorio.app` in `/Applications` on your Mac before you build the IPA.
+You need your own copy of Factorio 2.0.77. You do not need Xcode or a Mac.
+The companion supports Windows x64, Macs with Apple silicon, and Linux x64.
 
-## What you need
+## Install on your device
 
-- A Mac with Xcode 26 or later.
-- An iPhone or iPad with iOS 17 or iPadOS 17 or later.
-- A gamepad, or a physical keyboard and mouse.
-- `factorio.app` in `/Applications` on the Mac.
+1. Download the companion for your computer from [Releases](https://github.com/MyNameIsArko/FactorioPad/releases).
+2. Extract the download and open FactorioPad Companion.
+3. Download the Mac Factorio 2.0.77 DMG from [factorio.com](https://factorio.com/download), even if you use Windows or Linux.
+4. In the companion, select the DMG and click `Prepare app`.
+5. Click `Open result` when preparation finishes.
+6. Install `FactorioPad.ipa` with [Sideloadly](https://sideloadly.io/) on Windows or Mac, or [iloader](https://github.com/nab138/iloader) on Linux.
+7. Copy the generated `FactorioData` folder to Files on your iPhone or iPad.
+8. Open FactorioPad, tap `Choose game folder`, and select that folder.
 
-FactorioPad was tested with Factorio 2.0.77 and a gamepad on an iPad mini (7th generation) and an iPhone 15 Pro. The project targets iOS 17+ and iPadOS 17+. Older versions are untested. Other game versions are untested.
+Keep the selected folder on your device. FactorioPad uses it without copying it.
+Save sharing is optional. Choose `Play without sync` to start without it.
+
+Keep your generated IPA private because it contains your Factorio executable.
 
 ## What changes on iPhone and iPad
 
-- A gamepad acts as a mouse and keyboard. The right stick moves the mouse pointer.
-- A physical keyboard uses the game's keyboard controls. A mouse supports movement, clicks, dragging, and scrolling.
-- Touch supports menu taps and drags, but not touch-only gameplay.
-- Gamepad buttons send Factorio's default keyboard shortcuts. Some keys, including Tab, are not mapped to the gamepad.
-- New freeplay games skip the opening cutscene and tutorial prompt, so a gamepad does not need Tab to start playing.
+- A gamepad uses mouse and keyboard controls. The right stick moves the pointer.
+- Physical keyboards and mice support typing, clicks, dragging, and scrolling.
+- Touch supports menu taps and drags.
 - New installations use a 150% interface scale and one visible quickbar.
-- A button opens the on-screen keyboard when a gamepad is connected or no physical keyboard is connected. Hold it to see the gamepad controls.
-- Full-screen play locks a connected mouse pointer to keep it inside the game.
+- New freeplay games skip the opening cutscene and tutorial prompt.
+- Tap the keyboard button to type. Hold it to see the gamepad controls.
+- Full-screen play keeps a connected mouse pointer inside the game.
 
-## Use a keyboard and mouse
+## Share saves through iCloud
 
-Connect a physical keyboard and mouse to your iPhone or iPad. FactorioPad detects them automatically, and the keyboard uses your existing Factorio key bindings. The mouse moves the pointer and supports clicks, dragging, and scrolling. You can also keep a gamepad connected.
+Use the same iCloud Drive folder to share saves between your iPhone and iPad:
 
-## Build an IPA
+1. Create a folder in iCloud Drive, such as `FactorioPad Saves`.
+2. In FactorioPad, tap `Choose save folder`.
+3. Select that iCloud Drive folder on each device.
 
-An IPA is an app file for your iPhone or iPad. Open Terminal in the FactorioPad project folder.
-Run this command:
-
-```sh
-bash Tools/build_ipa.sh
-```
-
-The same IPA supports a gamepad and a physical keyboard and mouse. FactorioPad keeps Factorio's default key bindings.
-
-The IPA appears at `dist/FactorioPad.ipa`. Move it to your device through Files or iCloud Drive.
-Install it with [AltStore Classic](https://faq.altstore.io/altstore-classic/altserver) or [SideStore](https://docs.sidestore.io/docs/installation/prerequisites).
-With a free Apple Account, refresh the installed app within seven days. You do not need to rebuild the IPA each week.
-
-> [!NOTE]
-> Keep the IPA private because it contains your copy of Factorio. The [MIT license](LICENSE) covers only the FactorioPad source code.
-
-### Sync saves across Apple devices
-
-In the FactorioPad project folder, run this command once:
+FactorioPad syncs saves before the game starts and after you exit the game.
+Let iCloud finish transferring saves before you continue on another device.
+For Mac saves, use the [Mac setup script](Tools/link_macos_saves.sh).
 
 ```sh
 bash Tools/link_macos_saves.sh
 ```
 
-The script copies your Mac saves to `iCloud Drive/FactorioPad Saves`. It links Factorio's save folder to that location. It keeps the original folder as `saves.before-factoriopad`. If the iCloud folder already contains saves, the script stops. Merge those saves before you run it again.
-
-When FactorioPad first opens on an iPhone or iPad, choose `iCloud Drive/FactorioPad Saves` in Files. FactorioPad syncs saves with that folder before the game starts.
-
-## Run from Xcode
-
-1. Open Terminal in the FactorioPad project folder.
-2. Run `bash Tools/build_ipa.sh --prepare-only` to prepare your game files.
-3. Open `FactorioPad.xcodeproj` in Xcode.
-4. Connect your iPhone or iPad to your Mac.
-5. Select your device in Xcode.
-6. In Signing & Capabilities, select your Apple team.
-7. Set a unique Bundle Identifier, such as `com.yourname.FactorioPad`.
-8. Press Run.
+For development, see [CONTRIBUTING.md](CONTRIBUTING.md).

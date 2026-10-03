@@ -1,0 +1,64 @@
+name: Build companion releases
+
+on:
+  workflow_dispatch:
+    inputs:
+      template_release:
+        description: Release tag that contains FactorioPad-template.ipa
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            platform: Windows-x64
+          - os: macos-14
+            platform: macOS-arm64
+          - os: ubuntu-22.04
+            platform: Linux-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - name: Install desktop libraries on the Linux build machine
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk xvfb
+      - name: Install companion build tools
+        run: uv sync --locked
+      - name: Download the common game-free template
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TEMPLATE_RELEASE: ${{ inputs.template_release }}
+        run: gh release download "$TEMPLATE_RELEASE" --repo "$GITHUB_REPOSITORY" --pattern FactorioPad-template.ipa --dir build-input
+        shell: bash
+      - name: Test portable packaging
+        run: uv run --frozen python Tests/test_package_ipa.py
+      - name: Test the shared companion
+        if: runner.os != 'Linux'
+        run: uv run --frozen python Tests/test_companion.py
+      - name: Test the shared companion on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a uv run --frozen python Tests/test_companion.py
+      - name: Build the companion release
+        if: runner.os != 'Linux'
+        run: uv run --frozen python Tools/build_companion.py --template build-input/FactorioPad-template.ipa
+      - name: Build the companion release on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a uv run --frozen python Tools/build_companion.py --template build-input/FactorioPad-template.ipa
+      - uses: actions/upload-artifact@v7
+        with:
+          name: FactorioPad-Companion-${{ matrix.platform }}
+          path: dist/FactorioPad-Companion-*
+          if-no-files-found: error
