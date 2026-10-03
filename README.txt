@@ -1,5 +1,6 @@
 Extract the entire download and open FactorioPad Companion.
-Select your Mac Factorio 2.0.77 DMG from factorio.com.
+Select your Mac Factorio DMG from factorio.com.
+The executable and game data must use the same version.
 Choose where to save the result, then click "Prepare app".
 When preparation finishes, click "Open result".
 

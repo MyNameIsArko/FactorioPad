@@ -16,7 +16,6 @@ import zipfile
 from patch_factorio import CPU_TYPE_ARM64, MH_MAGIC_64, patch
 
 
-TESTED_VERSION = "2.0.77"
 PRIVATE_FILES = {"player-data.json", "factorio-account.json", ".DS_Store"}
 MARKER = "FactorioPadTemplate.json"
 
@@ -131,7 +130,7 @@ def make_template(ipa, output):
                     or info.get("FactorioPadExternalDataVersion") != 1):
                 raise ValueError("Use an IPA built from the updated FactorioPad source.")
             copy_app(source, target, prefix)
-            target.writestr(prefix + MARKER, json.dumps({"format": 1, "game_version": TESTED_VERSION}))
+            target.writestr(prefix + MARKER, json.dumps({"format": 2}))
         staging.rename(output)
 
 
@@ -143,8 +142,8 @@ def package(template, app, output):
     version = game_info["CFBundleShortVersionString"]
     data_root = contents / "data"
     data_info = json.loads((data_root / "base/info.json").read_text(encoding="utf-8"))
-    if version != TESTED_VERSION or data_info.get("version") != version:
-        raise ValueError(f"This release supports matching Mac executable and data version {TESTED_VERSION} only.")
+    if not isinstance(version, str) or not version or data_info.get("version") != version:
+        raise ValueError("The Mac executable and game data must use the same Factorio version.")
     for required in ("core/info.json", "cacert.pem", "base/scenarios/freeplay/control.lua"):
         if not (data_root / required).is_file():
             raise ValueError(f"The Mac game data is incomplete: {required}")
@@ -166,8 +165,8 @@ def package(template, app, output):
         with zipfile.ZipFile(template) as source, zipfile.ZipFile(result / "FactorioPad.ipa", "w", zipfile.ZIP_DEFLATED) as target:
             prefix = app_prefix(source)
             marker = json.loads(source.read(prefix + MARKER))
-            if marker != {"format": 1, "game_version": version}:
-                raise ValueError("The app template does not support this game version.")
+            if marker != {"format": 2}:
+                raise ValueError("The app template format does not match this packaging tool. Download the current companion release.")
             if prefix + "Frameworks/FactorioCompat.framework/FactorioCompat" not in source.namelist():
                 raise ValueError("The app template is missing the compatibility framework.")
             copy_app(source, target, prefix)
@@ -192,7 +191,7 @@ def package_dmg(template, dmg, output, seven_zip, progress=print):
     if output.exists():
         raise ValueError("The output folder already exists. Choose a new folder.")
     if not dmg.is_file() or dmg.suffix.lower() != ".dmg":
-        raise ValueError("Select the Mac Factorio 2.0.77 DMG download.")
+        raise ValueError("Select the Mac Factorio DMG download.")
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=output.parent) as temporary:
         progress("Extracting the Factorio game files...")
@@ -203,10 +202,10 @@ def package_dmg(template, dmg, output, seven_zip, progress=print):
                                  capture_output=True, text=True, errors="replace",
                                  creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
         if process.returncode:
-            raise ValueError("Cannot extract the DMG. Download the Mac Factorio 2.0.77 image again.")
+            raise ValueError("Cannot extract the DMG. Download the Mac Factorio image again.")
         app = pathlib.Path(temporary) / "Factorio/factorio.app"
         if not (app / "Contents/Info.plist").is_file():
-            raise ValueError("This DMG does not contain the supported Factorio app.")
+            raise ValueError("This DMG does not contain the Mac Factorio app.")
         progress("Preparing your IPA and game data...")
         package(template, app, output)
 

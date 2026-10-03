@@ -15,7 +15,7 @@ import shutil
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Tools"))
-from package_ipa import app_prefix, arm64_slice, make_template, package, package_dmg, remove_signature
+from package_ipa import MARKER, app_prefix, arm64_slice, make_template, package, package_dmg, remove_signature
 from patch_factorio import CPU_TYPE_ARM64, MH_MAGIC_64, MH_DYLIB, LC_ID_DYLIB
 
 
@@ -51,6 +51,7 @@ def rejected(action):
 
 
 def main():
+    fixture_version = "9.8.7"
     thin = executable()
     for magic, format in [(0xCAFEBABE, ">IIIII"), (0xCAFEBABF, ">IIQQII")]:
         slice_entry = (CPU_TYPE_ARM64, 0, 4096, len(thin), 12)
@@ -85,6 +86,7 @@ def main():
         make_template(source, template)
         with zipfile.ZipFile(template) as archive:
             assert len(archive.namelist()) == 6
+            assert json.loads(archive.read(prefix + MARKER)) == {"format": 2}
             assert archive.read(prefix + "Assets.car") == b"private content"
             assert archive.read(prefix + "AppIcon60x60@2x.png") == b"private content"
             info = plistlib.loads(archive.read(prefix + "Info.plist"))
@@ -94,9 +96,9 @@ def main():
         contents = app / "Contents"
         for folder in ["MacOS", "data/base/scenarios/freeplay", "data/core"]:
             (contents / folder).mkdir(parents=True)
-        (contents / "Info.plist").write_bytes(plistlib.dumps({"CFBundleShortVersionString": "2.0.77"}))
+        (contents / "Info.plist").write_bytes(plistlib.dumps({"CFBundleShortVersionString": fixture_version}))
         (contents / "MacOS/factorio").write_bytes(thin)
-        (contents / "data/base/info.json").write_text('{"version":"2.0.77"}')
+        (contents / "data/base/info.json").write_text(json.dumps({"version": fixture_version}))
         (contents / "data/core/info.json").write_text('{}')
         (contents / "data/cacert.pem").write_text('certificate')
         (contents / "data/base/scenarios/freeplay/control.lua").write_text('original freeplay')
@@ -135,9 +137,40 @@ def main():
         with mock_patch('subprocess.run', return_value=SimpleNamespace(returncode=0)), contextlib.redirect_stdout(io.StringIO()):
             rejected(lambda: package_dmg(template, dmg, root / "empty-dmg", Path('7zip')))
         assert not (root / "empty-dmg").exists()
-        (contents / "data/base/info.json").write_text('{"version":"2.0.78"}')
+        (contents / "data/base/info.json").write_text('{"version":"9.8.8"}')
         rejected(lambda: package(template, app, root / "failed"))
         assert not (root / "failed").exists()
+        # Arbitrary fixture versions pass packaging and retain their metadata.
+        for version in ("1.2.3", "99.0.0"):
+            (contents / "Info.plist").write_bytes(plistlib.dumps({"CFBundleShortVersionString": version}))
+            (contents / "data/base/info.json").write_text(json.dumps({"version": version}))
+            packaged = root / version
+            with contextlib.redirect_stdout(io.StringIO()):
+                package(template, app, packaged)
+            with zipfile.ZipFile(packaged / "FactorioPad.ipa") as archive:
+                guest_info = plistlib.loads(archive.read(prefix + "Frameworks/FactorioGuest.framework/Info.plist"))
+                assert guest_info["CFBundleShortVersionString"] == version
+            assert json.loads((packaged / "FactorioData/base/info.json").read_text())["version"] == version
+            (contents / "data/base/info.json").write_text(json.dumps({"version": fixture_version}))
+            rejected(lambda: package(template, app, root / (version + "-mismatch")))
+            assert not (root / (version + "-mismatch")).exists()
+        (contents / "data/base/info.json").write_text(json.dumps({"version": version}))
+        with mock_patch('subprocess.run', side_effect=extract), contextlib.redirect_stdout(io.StringIO()):
+            package_dmg(template, dmg, root / "another-version-dmg", Path('7zip'))
+        assert (root / "another-version-dmg/FactorioPad.ipa").is_file()
+        invalid_template = root / "invalid-template.ipa"
+        with zipfile.ZipFile(template) as source, zipfile.ZipFile(invalid_template, "w") as target:
+            for entry in source.infolist():
+                data = (json.dumps({"format": 999}).encode()
+                        if entry.filename == prefix + MARKER else source.read(entry))
+                target.writestr(entry, data)
+        with contextlib.redirect_stdout(io.StringIO()):
+            rejected(lambda: package(invalid_template, app, root / "invalid-template-result"))
+        assert not (root / "invalid-template-result").exists()
+        (contents / "Info.plist").write_bytes(plistlib.dumps({"CFBundleShortVersionString": ""}))
+        (contents / "data/base/info.json").write_text('{"version":""}')
+        rejected(lambda: package(template, app, root / "empty-version"))
+        assert not (root / "empty-version").exists()
         with zipfile.ZipFile(root / "unsafe.ipa", "w") as archive:
             archive.writestr(prefix + "../escape", b"bad")
         with zipfile.ZipFile(root / "unsafe.ipa") as archive:

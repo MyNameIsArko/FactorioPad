@@ -56,7 +56,7 @@ static NSString *FactorioDefaultConfig(
 )
 {
     return [NSString stringWithFormat:
-        // Factorio 2.0.77 uses format 13; older headers trigger settings conversion.
+        // Older configuration headers trigger settings conversion.
         @"; version=13\n"
          "[path]\n"
          "read-data=%@\n"

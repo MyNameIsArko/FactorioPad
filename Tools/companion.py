@@ -12,7 +12,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import webbrowser
 
-from package_ipa import MARKER, TESTED_VERSION, package_dmg
+from package_ipa import MARKER, package_dmg
 
 
 def resource_root():
@@ -64,7 +64,7 @@ class Companion:
         window.rowconfigure(0, weight=1)
         frame.columnconfigure(0, weight=1)
         ttk.Label(frame, text="Prepare FactorioPad", font=("", 20, "bold")).grid(row=0, column=0, columnspan=2, sticky="w")
-        ttk.Label(frame, text=f"Select the Mac Factorio {TESTED_VERSION} DMG from factorio.com.").grid(
+        ttk.Label(frame, text="Select the Mac Factorio DMG from factorio.com.").grid(
             row=1, column=0, columnspan=2, sticky="w", pady=(8, 20))
         ttk.Label(frame, text="Factorio DMG").grid(row=2, column=0, sticky="w")
         ttk.Entry(frame, textvariable=self.image, state="readonly", width=55).grid(row=3, column=0, sticky="ew", pady=6)
@@ -102,7 +102,7 @@ class Companion:
     def prepare(self):
         dmg = Path(self.image.get())
         if not self.image.get() or not dmg.is_file() or dmg.suffix.lower() != ".dmg":
-            messagebox.showerror("Select a game download", f"Select your Mac Factorio {TESTED_VERSION} DMG first.", parent=self.window)
+            messagebox.showerror("Select a game download", "Select your Mac Factorio DMG first.", parent=self.window)
             return
         self.busy = True
         self.output = None

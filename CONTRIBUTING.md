@@ -17,7 +17,8 @@ uv run python Tests/test_package_ipa.py
 uv run python Tests/test_companion.py
 ```
 
-For iOS changes, you need a Mac with Xcode 26+ and Factorio 2.0.77 at `/Applications/factorio.app`.
+For iOS changes, you need a Mac with Xcode 26+ and Mac Factorio at `/Applications/factorio.app`.
+Use Factorio 2.0.77 for testing. Other versions are untested and are not guaranteed to work.
 Run `uv run bash Tools/build_ipa.sh --prepare-only`, then open `FactorioPad.xcodeproj` in Xcode.
 Run `uv run bash Tests/run_tests.sh` before submitting iOS changes.
 

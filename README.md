@@ -2,14 +2,16 @@
 
 Play Factorio on your iPhone or iPad. You need iOS 17 or iPadOS 17 or newer, plus a gamepad or a keyboard and mouse. Touch supports menus, but not touch-only gameplay.
 
-You need your own copy of Factorio 2.0.77. You do not need Xcode or a Mac.
+You need your own copy of Factorio. You do not need Xcode or a Mac.
+Tested on Factorio 2.0.77. Other versions are untested and are not guaranteed to work.
+The executable and game data must use the same version.
 The companion supports Windows x64, Macs with Apple silicon, and Linux x64.
 
 ## Install on your device
 
 1. Download the companion for your computer from [Releases](https://github.com/MyNameIsArko/FactorioPad/releases).
 2. Extract the download and open FactorioPad Companion.
-3. Download the Mac Factorio 2.0.77 DMG from [factorio.com](https://factorio.com/download), even if you use Windows or Linux.
+3. Download the Mac Factorio DMG from [factorio.com](https://factorio.com/download), even if you use Windows or Linux. Use 2.0.77 for the tested version.
 4. In the companion, select the DMG and click `Prepare app`.
 5. Click `Open result` when preparation finishes.
 6. Install `FactorioPad.ipa` with [Sideloadly](https://sideloadly.io/) on Windows or Mac, or [iloader](https://github.com/nab138/iloader) on Linux.

@@ -10,6 +10,7 @@ import tempfile
 
 
 def main():
+    fixture_version = "9.8.7"
     original = Path(__file__).resolve().parent.parent / "Tools/prepare_guest.sh"
     with tempfile.TemporaryDirectory(prefix="factoriopad-prepare-") as temporary:
         root = Path(temporary) / "project with spaces"
@@ -24,7 +25,7 @@ def main():
         source.parent.mkdir(parents=True)
         source.write_bytes(b"replacement guest")
         (root / "game.app/Contents/Info.plist").write_bytes(
-            plistlib.dumps({"CFBundleShortVersionString": "2.0.77"})
+            plistlib.dumps({"CFBundleShortVersionString": fixture_version})
         )
         framework = root / "Vendor/FactorioGuest.framework"
         framework.mkdir(parents=True)
@@ -59,7 +60,7 @@ def main():
         assert (framework / "FactorioGuest").read_bytes() == source.read_bytes()
         assert (framework / "Info.plist").is_file()
         assert plistlib.loads((framework / "Info.plist").read_bytes())[
-            "CFBundleShortVersionString"] == "2.0.77"
+            "CFBundleShortVersionString"] == fixture_version
         assert not list(framework.parent.glob(".factorio-guest.*"))
         lock = framework.parent / ".factorio-guest.lock"
         lock.mkdir()

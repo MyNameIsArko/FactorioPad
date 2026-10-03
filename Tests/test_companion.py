@@ -114,7 +114,7 @@ def main():
             with zipfile.ZipFile(io.BytesIO(template)) as archive:
                 assert not any('FactorioData/' in p or 'FactorioGuest.framework/' in p for p in archive.namelist())
                 assert archive.read(prefix + 'Assets.car') == b'icon'
-                assert json.loads(archive.read(prefix + MARKER))['game_version'] == '2.0.77'
+                assert json.loads(archive.read(prefix + MARKER)) == {'format': 2}
             product = Path(command[command.index('--distpath') + 1]) / (build_companion.NAME + '.app')
             product.mkdir(parents=True)
             (product / 'FactorioPad-template.ipa').write_bytes(template)
