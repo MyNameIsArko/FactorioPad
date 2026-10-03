@@ -37,6 +37,7 @@ final class FactorioHostUIView: UIView {
     override var canBecomeFirstResponder: Bool { true }
 
     override init(frame: CGRect) {
+        FactorioLoader.logMessage("Creating the game view")
         super.init(frame: frame)
         backgroundColor = .black
         isOpaque = true
@@ -151,6 +152,7 @@ final class FactorioHostUIView: UIView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         guard window != nil else { detach(); return }
+        FactorioLoader.logMessage("Attaching the game view to the window")
         FactorioMetalHost.setHostView(self)
         if cursorDisplayLink == nil {
             let displayLink = CADisplayLink(target: self, selector: #selector(updateControllerCursor))
@@ -176,6 +178,7 @@ final class FactorioHostUIView: UIView {
             width: bounds.width, height: keyboardHeight)
 
         if !Self.factorioStarted {
+            FactorioLoader.logMessage("Game view layout is ready")
             Self.factorioStarted = true
             configureAudioSession()
             FactorioLoader.start(withWindowSize: bounds.size)
@@ -450,11 +453,13 @@ final class FactorioHostUIView: UIView {
     }
 
     private func configureAudioSession() {
+        FactorioLoader.logMessage("Configuring audio")
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, mode: .default)
             try session.setActive(true)
-        } catch { NSLog("[FactorioPad] Audio session failed: %@", error.localizedDescription) }
+            FactorioLoader.logMessage("Audio is ready")
+        } catch { FactorioLoader.logMessage("Audio session failed: \(error.localizedDescription)") }
     }
 }
 

@@ -110,7 +110,7 @@ def copy_app(source, target, prefix):
             continue
         if relative == "Info.plist":
             info = plistlib.loads(source.read(entry))
-            info.update(UIFileSharingEnabled=True, LSSupportsOpeningDocumentsInPlace=True)
+            info.update(UIFileSharingEnabled=False, LSSupportsOpeningDocumentsInPlace=True)
             target.writestr(entry, plistlib.dumps(info))
         else:
             with source.open(entry) as reader, target.open(entry, "w") as writer:

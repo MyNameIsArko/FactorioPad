@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 @main
 final class FactorioPadApp: UIResponder, UIApplicationDelegate {
     override init() {
+        FactorioLoader.logMessage("Creating the app delegate")
+        FactorioLoader.restoreStartupLogFolder()
         super.init()
         // Discard unused transfer data from earlier development builds.
         UserDefaults.standard.removeObject(forKey: "FactorioAccountSourceBookmark")
@@ -24,6 +26,7 @@ final class FactorioSceneDelegate: UIResponder, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession,
         options: UIScene.ConnectionOptions) {
         guard let scene = scene as? UIWindowScene else { return }
+        FactorioLoader.logMessage("Creating the app window")
         let window = UIWindow(windowScene: scene)
         window.rootViewController = FactorioRootController(rootView: FactorioLaunchView())
         window.makeKeyAndVisible()
@@ -70,7 +73,7 @@ struct FactorioLaunchView: View {
                             FactorioControlsView(onClose: { showsControls = false }, onSaves: {
                                 showsControls = false
                                 showsSaves = true
-                            })
+                            }, logURL: FactorioLoader.startupLogURL())
                         }
                     }
             } else {
@@ -103,8 +106,15 @@ struct FactorioLaunchView: View {
                         if let status { Text(status).foregroundStyle(.secondary) }
                         Button("Choose save folder") { selectsGameFolder = false; showsFolderPicker = true }
                             .buttonStyle(.borderedProminent)
-                        Button("Play without sync") { stage = .playing }
+                        if FactorioSaveSync.hasFolder {
+                            Button("Play") { Task { await syncBeforePlay() } }
+                        } else {
+                            Button("Play without sync") { stage = .playing }
+                        }
                         Button("Change game folder") { selectsGameFolder = true; showsFolderPicker = true }
+                    }
+                    if let log = FactorioLoader.startupLogURL() {
+                        ShareLink("Share log", item: log)
                     }
                 }
                 .padding(32)
@@ -114,15 +124,10 @@ struct FactorioLaunchView: View {
             }
         }
         .task {
-            do {
-                try FactorioLoader.prepareSharedGameFolder()
-                if FactorioLoader.gameDataProblem() == nil {
-                    stage = .setup
-                    if FactorioSaveSync.hasFolder { await syncBeforePlay() }
-                }
-            } catch {
-                status = error.localizedDescription
-            }
+            FactorioLoader.logMessage("Checking the game folder")
+            status = FactorioLoader.gameDataProblem()
+            if let status { FactorioLoader.logMessage(status) }
+            else { stage = .setup }
         }
         .onReceive(NotificationCenter.default.publisher(for: .factorioControlsRequested)) { _ in
             showsControls = true
@@ -153,6 +158,7 @@ struct FactorioLaunchView: View {
                     Task { await syncAfterPlay() }
                 }
             } catch {
+                FactorioLoader.logMessage(error.localizedDescription)
                 if (error as NSError).code != NSUserCancelledError { message = error.localizedDescription }
             }
         }
@@ -175,6 +181,7 @@ struct FactorioLaunchView: View {
             stage = .setup
             if FactorioSaveSync.hasFolder { await syncBeforePlay() }
         } catch {
+            FactorioLoader.logMessage(error.localizedDescription)
             status = error.localizedDescription
             stage = .gameSetup
         }
@@ -183,10 +190,12 @@ struct FactorioLaunchView: View {
     private func syncBeforePlay() async {
         guard stage == .setup else { return }
         stage = .syncing
+        FactorioLoader.logMessage("Syncing saves before the game")
         do {
             try await Task.detached(priority: .userInitiated) { try FactorioSaveSync.synchronize() }.value
             stage = .playing
         } catch {
+            FactorioLoader.logMessage(error.localizedDescription)
             status = "Save sync failed: \(error.localizedDescription)"
             stage = .setup
         }

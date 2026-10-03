@@ -23,7 +23,21 @@ int main(void)
             NSString *log = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil];
             NSCAssert([log containsString:@"game output"] && [log containsString:@"game error"] &&
                 [log containsString:@"early loader error"], @"all output must reach the file before the game exits");
-            NSCAssert(![log containsString:@"old launch"], @"a new launch must replace the previous log");
+            NSCAssert([log containsString:@"old launch"], @"reopening must retain the failed launch log");
+            NSString *dataFolder = [folder stringByAppendingPathComponent:@"FactorioData"];
+            [files createDirectoryAtPath:dataFolder withIntermediateDirectories:YES attributes:nil error:nil];
+            NSURL *source = [NSURL fileURLWithPath:path];
+            NSURL *destination = [NSURL fileURLWithPath:dataFolder];
+            NSCAssert(FactorioCopyStartupLog(source, destination, &error), @"publish early output before the game starts");
+            NSString *copy = [dataFolder stringByAppendingPathComponent:@"FactorioPad.log"];
+            NSCAssert([[files contentsAtPath:copy] isEqual:[files contentsAtPath:path]], @"published logs must include early output");
+            printf("output while the game is stalled\n");
+            NSCAssert(FactorioCopyStartupLog(source, destination, &error), @"refresh output while the game is running");
+            NSCAssert([[files contentsAtPath:copy] isEqual:[files contentsAtPath:path]], @"publication must replace stale output");
+            NSCAssert(FactorioStartLogging(folder, &error), @"logging must survive reopening");
+            printf("next app launch\n");
+            NSCAssert([[NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil]
+                containsString:@"output while the game is stalled"], @"a restart must retain game output for sharing");
             _exit(0);
         }
         int status = 0;
@@ -40,6 +54,14 @@ int main(void)
         NSCAssert(!FactorioStartLogging(folder, &error), @"logging must not overwrite a symlink target");
         NSCAssert([[NSString stringWithContentsOfFile:protectedFile encoding:NSUTF8StringEncoding error:nil]
             isEqualToString:@"keep this"], @"a rejected log path must leave the target intact");
+        NSString *publishedPath = [folder stringByAppendingPathComponent:@"FactorioData/FactorioPad.log"];
+        [files removeItemAtPath:publishedPath error:nil];
+        NSCAssert([files createSymbolicLinkAtPath:publishedPath withDestinationPath:protectedFile error:nil],
+            @"create a publication symlink");
+        error = nil;
+        NSCAssert(!FactorioCopyStartupLog([NSURL fileURLWithPath:protectedFile],
+            [NSURL fileURLWithPath:publishedPath.stringByDeletingLastPathComponent], &error) && error,
+            @"publication must report a symlink error without overwriting its target");
         [files removeItemAtPath:folder error:nil];
         puts("Factorio startup logging tests passed.");
     }

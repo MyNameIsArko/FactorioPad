@@ -6,7 +6,9 @@ NS_ASSUME_NONNULL_BEGIN
 @interface FactorioLoader : NSObject
 
 + (nullable NSString *)gameDataProblem;
-+ (BOOL)prepareSharedGameFolderWithError:(NSError **)error;
++ (nullable NSURL *)startupLogURL;
++ (void)restoreStartupLogFolder;
++ (void)logMessage:(NSString *)message;
 + (BOOL)selectGameDataFromURL:(NSURL *)url error:(NSError **)error;
 + (void)startWithWindowSize:(CGSize)windowSize;
 

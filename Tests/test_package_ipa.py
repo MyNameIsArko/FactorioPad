@@ -90,7 +90,8 @@ def main():
             assert archive.read(prefix + "Assets.car") == b"private content"
             assert archive.read(prefix + "AppIcon60x60@2x.png") == b"private content"
             info = plistlib.loads(archive.read(prefix + "Info.plist"))
-            assert info["UIFileSharingEnabled"] and info["CFBundleIcons"]["CFBundlePrimaryIcon"]["CFBundleIconName"] == "AppIcon"
+            assert not info["UIFileSharingEnabled"] and info["LSSupportsOpeningDocumentsInPlace"]
+            assert info["CFBundleIcons"]["CFBundlePrimaryIcon"]["CFBundleIconName"] == "AppIcon"
         rejected(lambda: make_template(source, template))
         app = root / "factorio.app"
         contents = app / "Contents"

@@ -15,6 +15,12 @@
 #include <unistd.h>
 
 static NSString *const FactorioDataDirectoryName = @"FactorioPad";
+static NSURL *FactorioStartupLog;
+static NSURL *FactorioSharedLogFolder;
+static BOOL FactorioSharedLogAccess;
+static dispatch_queue_t FactorioLogQueue;
+static dispatch_source_t FactorioLogTimer;
+static unsigned long long FactorioCopiedLogSize;
 
 static void FactorioLog(NSString *message)
 {
@@ -25,7 +31,8 @@ static void FactorioLog(NSString *message)
 static BOOL FactorioStartLogging(NSString *dataPath, NSError **error)
 {
     NSString *path = [dataPath stringByAppendingPathComponent:@"FactorioPad.log"];
-    int log = open(path.fileSystemRepresentation, O_WRONLY | O_CREAT | O_TRUNC | O_APPEND | O_NOFOLLOW, 0600);
+    // ponytail: one append-only diagnostic log; add rotation if field logs become too large.
+    int log = open(path.fileSystemRepresentation, O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW, 0600);
     if (log < 0) {
         if (error) { *error = [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:nil]; }
         return NO;
@@ -76,6 +83,53 @@ static NSString *FactorioWritableRoot(void)
     return [applicationSupport.path
         stringByAppendingPathComponent:FactorioDataDirectoryName];
 }
+
+static BOOL FactorioCopyStartupLog(NSURL *source, NSURL *folder, NSError **error)
+{
+    NSURL *destination = [folder URLByAppendingPathComponent:@"FactorioPad.log"];
+    NSNumber *link = nil;
+    [destination getResourceValue:&link forKey:NSURLIsSymbolicLinkKey error:nil];
+    if (link.boolValue) {
+        if (error) { *error = [NSError errorWithDomain:NSCocoaErrorDomain code:NSFileWriteInvalidFileNameError
+            userInfo:@{NSLocalizedDescriptionKey: @"The log destination is a symbolic link."}]; }
+        return NO;
+    }
+    NSData *data = [NSData dataWithContentsOfURL:source options:0 error:error];
+    if (!data) { return NO; }
+    __block BOOL written = NO;
+    __block NSError *failure = nil;
+    [[[NSFileCoordinator alloc] initWithFilePresenter:nil] coordinateWritingItemAtURL:destination
+        options:NSFileCoordinatorWritingForReplacing error:&failure byAccessor:^(NSURL *url) {
+            written = [data writeToURL:url options:NSDataWritingAtomic error:&failure];
+        }];
+    if (failure && error) { *error = failure; }
+    return written;
+}
+
+#ifndef FACTORIO_CONFIG_TEST
+__attribute__((constructor)) static void FactorioBeginStartupLogging(void)
+{
+    @autoreleasepool {
+        NSString *root = FactorioWritableRoot();
+        NSError *error = nil;
+        if (![NSFileManager.defaultManager createDirectoryAtPath:root withIntermediateDirectories:YES
+            attributes:nil error:&error] || !FactorioStartLogging(root, &error)) {
+            FactorioLog([NSString stringWithFormat:@"Cannot start logging: %@", error.localizedDescription]);
+            return;
+        }
+        FactorioStartupLog = [NSURL fileURLWithPath:[root stringByAppendingPathComponent:@"FactorioPad.log"]];
+        struct utsname device = {};
+        uname(&device);
+        FactorioLog([NSString stringWithFormat:@"Startup %@; FactorioPad %@ (%@)", NSDate.date,
+            NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"],
+            NSBundle.mainBundle.infoDictionary[@"CFBundleVersion"]]);
+        FactorioLog([NSString stringWithFormat:@"Device: %s; OS: %@; Memory: %llu bytes",
+            device.machine, NSProcessInfo.processInfo.operatingSystemVersionString,
+            NSProcessInfo.processInfo.physicalMemory]);
+        FactorioLog(@"Logging started before UIApplicationMain");
+    }
+}
+#endif
 
 static NSArray<NSString *> *FactorioControllerBindings(void)
 {
@@ -289,21 +343,6 @@ static NSError *FactorioGameDataError(NSString *message)
         userInfo:@{NSLocalizedDescriptionKey: message}];
 }
 
-static BOOL FactorioPrepareSharedFolder(NSURL *documents, NSError **error)
-{
-    NSFileManager *files = NSFileManager.defaultManager;
-    if (![files createDirectoryAtURL:documents withIntermediateDirectories:YES attributes:nil error:error]) {
-        return NO;
-    }
-    NSURL *readme = [documents URLByAppendingPathComponent:@"README.txt"];
-    if ([files fileExistsAtPath:readme.path]) { return YES; }
-    return [@"Open FactorioPad and choose your FactorioData folder. The app uses it without copying it.\n"
-        "You can also copy FactorioData into this folder through Files or Apple Devices.\n"
-        "Save sharing is optional and uses a separate folder.\n"
-        "If the game does not start, attach FactorioPad.log from your selected FactorioData folder to your issue.\n"
-        writeToURL:readme atomically:YES encoding:NSUTF8StringEncoding error:error];
-}
-
 static NSString *const FactorioGameFolderBookmark = @"FactorioGameFolderBookmark";
 
 static BOOL FactorioSelectGameData(NSURL *source, NSUserDefaults *preferences, NSString *version, NSError **error)
@@ -467,16 +506,71 @@ static void *FactorioOpenFramework(NSString *name, int flags)
     return [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
 }
 
++ (NSURL *)startupLogURL
+{
+    return FactorioStartupLog;
+}
+
++ (void)logMessage:(NSString *)message
+{
+    FactorioLog(message);
+}
+
++ (void)shareStartupLogWithFolder:(NSURL *)folder
+{
+    if (!FactorioStartupLog) { return; }
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ FactorioLogQueue = dispatch_queue_create("pl.adrian.FactorioPad.logs", DISPATCH_QUEUE_SERIAL); });
+    dispatch_async(FactorioLogQueue, ^{
+        if ([FactorioSharedLogFolder isEqual:folder]) { return; }
+        if (FactorioSharedLogAccess) { [FactorioSharedLogFolder stopAccessingSecurityScopedResource]; }
+        FactorioSharedLogFolder = folder;
+        FactorioSharedLogAccess = [folder startAccessingSecurityScopedResource];
+        FactorioCopiedLogSize = 0;
+        NSError *error = nil;
+        if (!FactorioCopyStartupLog(FactorioStartupLog, folder, &error)) {
+            FactorioLog([NSString stringWithFormat:@"Cannot copy the log to FactorioData: %@. Use Share log in the app.", error]);
+        }
+        if (!FactorioLogTimer) {
+            FactorioLogTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, FactorioLogQueue);
+            dispatch_source_set_timer(FactorioLogTimer, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC),
+                NSEC_PER_SEC, NSEC_PER_SEC / 10);
+            dispatch_source_set_event_handler(FactorioLogTimer, ^{
+                unsigned long long size = [NSFileManager.defaultManager attributesOfItemAtPath:FactorioStartupLog.path error:nil].fileSize;
+                if (size != FactorioCopiedLogSize && FactorioCopyStartupLog(FactorioStartupLog, FactorioSharedLogFolder, nil)) {
+                    FactorioCopiedLogSize = size;
+                }
+            });
+            dispatch_resume(FactorioLogTimer);
+        }
+    });
+}
+
++ (void)restoreStartupLogFolder
+{
+    FactorioLog(@"Restoring the selected game folder for logging");
+    NSData *bookmark = [NSUserDefaults.standardUserDefaults dataForKey:FactorioGameFolderBookmark];
+    if (!bookmark) { return; }
+    NSError *error = nil;
+    NSURL *folder = [NSURL URLByResolvingBookmarkData:bookmark options:0 relativeToURL:nil
+        bookmarkDataIsStale:nil error:&error];
+    if (folder) { [self shareStartupLogWithFolder:folder]; }
+    else { FactorioLog([NSString stringWithFormat:@"Cannot restore the log folder: %@", error.localizedDescription]); }
+}
+
 + (NSString *)gameDataProblem
 {
     NSString *version = [self guestVersion];
     if (!version.length) {
         return @"This app template needs your Factorio executable. Use the packaging tool on your computer, then sideload the resulting IPA.";
     }
-    // Ask older imports to select a folder once so the app can use it in place.
-    if (![NSUserDefaults.standardUserDefaults dataForKey:FactorioGameFolderBookmark] &&
-        [NSFileManager.defaultManager fileExistsAtPath:[[self documentsFolder].path stringByAppendingPathComponent:@"FactorioData"]]) {
-        return @"Choose your FactorioData folder.";
+    // Preserve older imports now that Documents is hidden from Files.
+    if (![NSUserDefaults.standardUserDefaults dataForKey:FactorioGameFolderBookmark]) {
+        NSURL *legacy = [[self documentsFolder] URLByAppendingPathComponent:@"FactorioData" isDirectory:YES];
+        if ([NSFileManager.defaultManager fileExistsAtPath:legacy.path]) {
+            NSError *error = nil;
+            if (![self selectGameDataFromURL:legacy error:&error]) { return error.localizedDescription; }
+        }
     }
     NSError *error = nil;
     BOOL access = NO;
@@ -486,18 +580,18 @@ static void *FactorioOpenFramework(NSString *name, int flags)
     return error.localizedDescription;
 }
 
-+ (BOOL)prepareSharedGameFolderWithError:(NSError **)error
-{
-    return FactorioPrepareSharedFolder([self documentsFolder], error);
-}
-
 + (BOOL)selectGameDataFromURL:(NSURL *)url error:(NSError **)error
 {
-    return FactorioSelectGameData(url, NSUserDefaults.standardUserDefaults, [self guestVersion], error);
+    FactorioLog(@"Selecting the game folder");
+    BOOL selected = FactorioSelectGameData(url, NSUserDefaults.standardUserDefaults, [self guestVersion], error);
+    if (selected) { [self shareStartupLogWithFolder:url]; }
+    else if (error && *error) { FactorioLog((*error).localizedDescription); }
+    return selected;
 }
 
 + (void)startWithWindowSize:(CGSize)windowSize
 {
+    FactorioLog(@"Starting the game loader");
     FactorioConfigureEnvironment();
 
     NSString *guestVersion = [self guestVersion];
@@ -516,21 +610,8 @@ static void *FactorioOpenFramework(NSString *name, int flags)
     BOOL threadStarted = NO;
     @try {
         NSString *readDataPath = dataURL.path;
-        NSError *logError = nil;
-        if (!FactorioStartLogging(readDataPath, &logError)) {
-            NSError *fallbackError = nil;
-            FactorioStartLogging([self documentsFolder].path, &fallbackError);
-            FactorioLog([NSString stringWithFormat:@"Cannot write the log in FactorioData: %@", logError.localizedDescription]);
-            if (fallbackError) { FactorioLog(fallbackError.localizedDescription); }
-        }
-        struct utsname device = {};
-        uname(&device);
-        FactorioLog([NSString stringWithFormat:@"Startup %@; FactorioPad %@ (%@); Factorio %@",
-            NSDate.date, NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"],
-            NSBundle.mainBundle.infoDictionary[@"CFBundleVersion"], guestVersion]);
-        FactorioLog([NSString stringWithFormat:@"Device: %s; OS: %@; Memory: %llu bytes; Viewport: %.0fx%.0f",
-            device.machine, NSProcessInfo.processInfo.operatingSystemVersionString,
-            NSProcessInfo.processInfo.physicalMemory, windowSize.width, windowSize.height]);
+        FactorioLog([NSString stringWithFormat:@"Factorio %@; Viewport: %.0fx%.0f",
+            guestVersion, windowSize.width, windowSize.height]);
         FactorioLog(@"Preparing game configuration");
         NSString *configPath = FactorioPrepareWritableData(readDataPath);
         if (!configPath) {

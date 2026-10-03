@@ -27,9 +27,15 @@ Keep your generated IPA private because it contains your Factorio executable.
 
 If the game stays black or stops during startup, open your selected `FactorioData` folder in Files.
 Attach `FactorioPad.log` to your GitHub issue.
-The log contains device details, startup steps, and game output.
-Each game launch replaces the log, so attach it before you reopen the app.
-If the selected folder does not allow writing, find `FactorioPad.log` in the app folder beside `README.txt`.
+The log starts before the app opens its window and contains device details, startup steps, and game output.
+The app copies the log to `FactorioData` during use.
+If you cannot find the file, tap `Share log` on the setup screen.
+During a game, hold the keyboard button and tap `Share log` in the controls panel.
+The log keeps output across app restarts, so you can share it after a failed launch.
+
+FactorioPad keeps its own app folder hidden in Files.
+Keep `FactorioData` in a folder that you create under `On My iPhone`, `On My iPad`, or iCloud Drive.
+Existing game data inside the app stays available through its saved folder selection.
 
 ## What changes on iPhone and iPad
 

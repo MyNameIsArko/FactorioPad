@@ -10,9 +10,10 @@ Open FactorioPad and choose that folder.
 Keep the selected folder on your device.
 
 If the game does not start, open your selected FactorioData folder in Files.
-Attach FactorioPad.log to your GitHub issue before you reopen the app.
-Each game launch replaces this log.
-If FactorioData does not allow writing, find FactorioPad.log in the app folder beside README.txt.
+Attach FactorioPad.log to your GitHub issue.
+If you cannot find it, tap "Share log" on the setup screen.
+The log keeps output across app restarts.
+Keep FactorioData in your own folder outside the app.
 
 You need iOS 17 or iPadOS 17 or newer, plus a gamepad or a keyboard and mouse.
 Keep your generated IPA private because it contains your Factorio executable.

@@ -3,6 +3,7 @@ import SwiftUI
 struct FactorioControlsView: View {
     var onClose: () -> Void
     var onSaves: () -> Void
+    var logURL: URL? = nil
 
     typealias Activity = (title: String, icon: String, controls: [(action: String, buttons: String)])
     static let activities: [Activity] = [
@@ -85,6 +86,11 @@ struct FactorioControlsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    if let log = logURL {
+                        ShareLink("Share log", item: log)
+                            .buttonStyle(.bordered)
+                            .focusable(false)
+                    }
                     Text("Hold LB (Shift) or RB (Ctrl) before the other button. In an inventory, point at the stack you want to transfer.")
                         .foregroundStyle(.secondary)
                     Text("To change a quickbar assignment, point at the slot and press RB + D-pad ↑ to clear it. With an empty hand, press RT on the empty slot and choose a replacement item. Release LT before clearing a slot.")

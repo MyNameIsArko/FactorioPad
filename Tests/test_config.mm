@@ -89,12 +89,7 @@ int main(void)
             atomically:YES encoding:NSUTF8StringEncoding error:nil];
         NSCAssert(!FactorioReadDataPath(bundle, documents, guestVersion, &message),
             @"invalid copied data must not silently fall back to bundled data");
-        NSURL *documentsURL = [NSURL fileURLWithPath:documents isDirectory:YES];
         NSError *importError = nil;
-        NSCAssert(FactorioPrepareSharedFolder(documentsURL, &importError), @"shared folder setup must succeed");
-        NSCAssert([files fileExistsAtPath:[documents stringByAppendingPathComponent:@"README.txt"]],
-            @"Documents must contain a file on first launch");
-        NSCAssert(FactorioPrepareSharedFolder(documentsURL, &importError), @"repeated setup must succeed");
         NSString *suite = [@"FactorioGameFolderTests-" stringByAppendingString:NSUUID.UUID.UUIDString];
         NSUserDefaults *preferences = [[NSUserDefaults alloc] initWithSuiteName:suite];
         NSURL *source = [NSURL fileURLWithPath:bundledData isDirectory:YES];
@@ -108,7 +103,7 @@ int main(void)
         NSCAssert([opened.path.stringByResolvingSymlinksInPath isEqualToString:bundledData.stringByResolvingSymlinksInPath], @"startup must use the selected folder in place");
         if (access) { [opened stopAccessingSecurityScopedResource]; }
         NSCAssert(FactorioDataProblem(copiedData, guestVersion), @"selection must not replace old copied data");
-        NSCAssert([files contentsOfDirectoryAtPath:documents error:nil].count == 2,
+        NSCAssert([files contentsOfDirectoryAtPath:documents error:nil].count == 1,
             @"selection must not create copies or temporary folders");
         NSCAssert(!FactorioSelectGameData(source, preferences, mismatchedVersion, &importError),
             @"a mismatched selection must fail");
