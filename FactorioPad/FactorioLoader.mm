@@ -31,7 +31,6 @@ static void FactorioLog(NSString *message)
 static BOOL FactorioStartLogging(NSString *dataPath, NSError **error)
 {
     NSString *path = [dataPath stringByAppendingPathComponent:@"FactorioPad.log"];
-    // ponytail: one append-only diagnostic log; add rotation if field logs become too large.
     int log = open(path.fileSystemRepresentation, O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW, 0600);
     if (log < 0) {
         if (error) { *error = [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:nil]; }
