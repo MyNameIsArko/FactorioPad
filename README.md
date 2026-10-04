@@ -32,7 +32,6 @@ The app copies the log to `FactorioData` during use.
 If you cannot find the file, tap `Share log` on the setup screen.
 During a game, hold the keyboard button and tap `Share log` in the controls panel.
 The log keeps recent output across app restarts, so you can share it after a failed launch.
-The file stays below 4 MiB. Each launch records up to 1 MiB to preserve space for recent failures.
 
 FactorioPad keeps its own app folder hidden in Files.
 Keep `FactorioData` in a folder that you create under `On My iPhone`, `On My iPad`, or iCloud Drive.
