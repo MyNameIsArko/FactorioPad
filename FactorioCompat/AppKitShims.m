@@ -3888,7 +3888,6 @@ static NSCursor *gFactorioCurrentCursor = nil;
 EMPTY_APPKIT_CLASS(NSBezierPath)
 EMPTY_APPKIT_CLASS(NSGraphicsContext)
 EMPTY_APPKIT_CLASS(NSOpenGLPixelFormat)
-EMPTY_APPKIT_CLASS(NSWorkspace)
 
 EMPTY_APPKIT_CLASS(FactorioNSColor)
 

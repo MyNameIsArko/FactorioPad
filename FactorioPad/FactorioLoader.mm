@@ -4,6 +4,9 @@
 #import "FactorioKeyboardBridge.h"
 
 #import <Foundation/Foundation.h>
+#ifndef FACTORIO_CONFIG_TEST
+#import <Metal/Metal.h>
+#endif
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -12,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/utsname.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static NSString *const FactorioDataDirectoryName = @"FactorioPad";
@@ -21,6 +25,21 @@ static BOOL FactorioSharedLogAccess;
 static dispatch_queue_t FactorioLogQueue;
 static dispatch_source_t FactorioLogTimer;
 static unsigned long long FactorioCopiedLogSize;
+static const off_t FactorioLogLimit = 4 * 1024 * 1024;
+static dispatch_semaphore_t FactorioLogWriterDone;
+
+static BOOL FactorioWriteLogBytes(int file, const void *bytes, size_t count)
+{
+    const char *cursor = (const char *)bytes;
+    while (count) {
+        ssize_t written = write(file, cursor, count);
+        if (written < 0 && errno == EINTR) { continue; }
+        if (written <= 0) { return NO; }
+        cursor += written;
+        count -= (size_t)written;
+    }
+    return YES;
+}
 
 static void FactorioLog(NSString *message)
 {
@@ -31,9 +50,15 @@ static void FactorioLog(NSString *message)
 static BOOL FactorioStartLogging(NSString *dataPath, NSError **error)
 {
     NSString *path = [dataPath stringByAppendingPathComponent:@"FactorioPad.log"];
-    int log = open(path.fileSystemRepresentation, O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW, 0600);
+    int log = open(path.fileSystemRepresentation, O_RDWR | O_CREAT | O_APPEND | O_NOFOLLOW, 0600);
     if (log < 0) {
         if (error) { *error = [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:nil]; }
+        return NO;
+    }
+    int output[2];
+    if (pipe(output) != 0) {
+        if (error) { *error = [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:nil]; }
+        close(log);
         return NO;
     }
     fflush(stdout);
@@ -41,7 +66,7 @@ static BOOL FactorioStartLogging(NSString *dataPath, NSError **error)
     int originalOut = dup(STDOUT_FILENO);
     int originalErr = dup(STDERR_FILENO);
     BOOL ready = originalOut >= 0 && originalErr >= 0 &&
-        dup2(log, STDOUT_FILENO) >= 0 && dup2(log, STDERR_FILENO) >= 0;
+        dup2(output[1], STDOUT_FILENO) >= 0 && dup2(output[1], STDERR_FILENO) >= 0;
     int failure = errno;
     if (!ready) {
         if (originalOut >= 0) { dup2(originalOut, STDOUT_FILENO); }
@@ -53,7 +78,62 @@ static BOOL FactorioStartLogging(NSString *dataPath, NSError **error)
     }
     if (originalOut >= 0) { close(originalOut); }
     if (originalErr >= 0) { close(originalErr); }
-    close(log);
+    close(output[1]);
+    int input = output[0];
+    if (!ready) {
+        close(input);
+        close(log);
+        return NO;
+    }
+    // Drain the old pipe before starting another log session.
+    if (FactorioLogWriterDone) { dispatch_semaphore_wait(FactorioLogWriterDone, DISPATCH_TIME_FOREVER); }
+    struct stat info = {};
+    fstat(log, &info);
+    if (info.st_size >= 3 * 1024 * 1024) {
+        // Recover the first error from oversized v2.0.2 logs. Otherwise keep recent sessions.
+        BOOL oversized = info.st_size > FactorioLogLimit;
+        size_t retained = oversized ? 256 * 1024 : 2 * 1024 * 1024;
+        NSMutableData *history = [NSMutableData data];
+        if (oversized) {
+            NSMutableData *head = [NSMutableData dataWithLength:retained];
+            ssize_t count = pread(log, head.mutableBytes, retained, 0);
+            if (count > 0) { head.length = (NSUInteger)count; [history appendData:head]; }
+        }
+        [history appendData:[@"\n[FactorioPad] Older log output trimmed.\n" dataUsingEncoding:NSUTF8StringEncoding]];
+        NSMutableData *tail = [NSMutableData dataWithLength:retained];
+        ssize_t count = pread(log, tail.mutableBytes, retained, info.st_size - (off_t)retained);
+        if (count > 0) {
+            tail.length = (NSUInteger)count;
+            [history appendData:tail];
+            if (ftruncate(log, 0) == 0) { FactorioWriteLogBytes(log, history.bytes, history.length); }
+        }
+    }
+    fstat(log, &info);
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    FactorioLogWriterDone = done;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        off_t size = info.st_size;
+        const char marker[] = "\n[FactorioPad] Log limit reached. Further output omitted for this launch.\n";
+        off_t capacity = MAX(MIN(FactorioLogLimit, size + 1024 * 1024) - (off_t)sizeof(marker), 0);
+        BOOL recording = size < capacity;
+        char buffer[8192];
+        for (;;) {
+            ssize_t count = read(input, buffer, sizeof(buffer));
+            if (count < 0 && errno == EINTR) { continue; }
+            if (count <= 0) { break; }
+            if (!recording) { continue; }
+            size_t kept = (size_t)MIN((off_t)count, capacity - size);
+            recording = FactorioWriteLogBytes(log, buffer, kept);
+            size += (off_t)kept;
+            if (recording && size >= capacity) {
+                FactorioWriteLogBytes(log, marker, sizeof(marker) - 1);
+                recording = NO;
+            }
+        }
+        close(input);
+        close(log);
+        dispatch_semaphore_signal(done);
+    });
     return ready;
 }
 
@@ -239,11 +319,12 @@ static NSString *FactorioUpdateConfigPaths(
     return [result componentsJoinedByString:@"\n"];
 }
 
-static NSString *FactorioApplyControlSection(
+static NSString *FactorioApplyConfigSection(
     NSString *config,
     NSString *section,
     NSArray<NSString *> *bindings,
-    BOOL enabled
+    BOOL enabled,
+    BOOL replaceExisting = NO
 )
 {
     NSArray<NSString *> *lines = [config componentsSeparatedByString:@"\n"];
@@ -276,6 +357,10 @@ static NSString *FactorioApplyControlSection(
                 if ([binding hasPrefix:[key stringByAppendingString:@"="]]) {
                     [present addObject:key];
                     removeLine = !enabled && [trimmed isEqualToString:binding];
+                    if (enabled && replaceExisting) {
+                        [result addObject:binding];
+                        removeLine = YES;
+                    }
                     break;
                 }
             }
@@ -460,10 +545,20 @@ static NSString *FactorioPrepareWritableData(NSString *readDataPath)
         config = FactorioDefaultConfig(readDataPath, root);
     } else {
         config = FactorioUpdateConfigPaths(config, readDataPath, root);
-        config = FactorioApplyControlSection(config, @"[input]",
+        config = FactorioApplyConfigSection(config, @"[input]",
             @[@"heading-vehicle-driving=true"], YES);
-        config = FactorioApplyControlSection(config, @"[controls]",
+        config = FactorioApplyConfigSection(config, @"[controls]",
             FactorioControllerBindings(), NO);
+    }
+
+    id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+    BOOL compressedTextures = device.supportsBCTextureCompression;
+    FactorioLog([NSString stringWithFormat:@"GPU: %@; BC texture compression: %@",
+        device.name ?: @"unavailable", compressedTextures ? @"supported" : @"unsupported"]);
+    if (!compressedTextures) {
+        config = FactorioApplyConfigSection(config, @"[graphics]",
+            @[@"texture-compression-level=none"], YES, YES);
+        FactorioLog(@"Disabled texture compression for this GPU");
     }
 
     if (![config writeToFile:configPath

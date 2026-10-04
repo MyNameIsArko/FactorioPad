@@ -12,6 +12,8 @@ xcrun clang++ -fobjc-arc -fblocks -IFactorioCompat -framework Foundation -framew
 xcrun clang++ -fobjc-arc -fblocks -IFactorioCompat -framework Foundation -framework CoreGraphics \
     Tests/test_logging.mm -o "$test_dir/logging"
 "$test_dir/logging"
+xcrun clang -fobjc-arc -fblocks -framework Foundation Tests/test_workspace.m -o "$test_dir/workspace"
+"$test_dir/workspace"
 xcrun swiftc FactorioPad/FactorioOnScreenKeyboard.swift Tests/test_keyboard.swift -o "$test_dir/keyboard"
 "$test_dir/keyboard"
 xcrun swiftc FactorioPad/FactorioMouseButtonSources.swift Tests/test_mouse_buttons.swift -o "$test_dir/mouse-buttons"

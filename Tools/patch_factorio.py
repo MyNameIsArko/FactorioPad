@@ -67,6 +67,27 @@ FRAMEWORK_RE = re.compile(
     r"([^/]+)$"
 )
 
+# Factorio 2.0.77 ResourceManager creates a transparent 4x4 BC3 placeholder.
+# Keep its zeroed 16-byte buffer, but use a 2x2 BGRA8 texture on iOS.
+TRANSPARENT_TEXTURE = struct.pack("<22I",
+    0x52800208, 0x4E080D00, 0x910007E8, 0x3C8FF100, 0xA9007C1F,
+    0xF90093FF, 0x52800028, 0x390487E8, 0x52800128, 0xB9012BFF,
+    0x3904A3FF, 0xB90127E8, 0xF94002A8, 0xF9405509, 0x910383E8,
+    0x9103E3E3, 0x910483E5, 0xAA1503E0, 0x52800081, 0x52800004,
+    0x52800082, 0xD63F0120)
+
+
+def patch_transparent_texture(data: bytearray) -> None:
+    if data.count(TRANSPARENT_TEXTURE) != 1:
+        raise RuntimeError("Cannot patch the startup texture. Use Mac Factorio 2.0.77.")
+    offset = data.index(TRANSPARENT_TEXTURE)
+    if offset % 4:
+        raise RuntimeError("The startup texture instructions are not aligned.")
+    struct.pack_into("<I", data, offset + 8 * 4, 0x52800028)   # BitmapFormat 9 (BC3) -> 1 (BGRA8)
+    struct.pack_into("<I", data, offset + 18 * 4, 0x52800041)  # width 4 -> 2
+    struct.pack_into("<I", data, offset + 20 * 4, 0x52800042)  # height 4 -> 2
+    print("[patch] Transparent startup texture: BC3 -> BGRA8")
+
 def patch_ca_bundle_path(data: bytearray) -> None:
     old = b"/etc/ssl/cert.pem"
     new = b"cacert.pem"
@@ -179,6 +200,7 @@ def patch(path):
         )
 
     patch_ca_bundle_path(data)
+    patch_transparent_texture(data)
 
     print(
         f"ARM64 Mach-O: "

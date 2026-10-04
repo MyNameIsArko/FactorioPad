@@ -3,7 +3,7 @@
 Play Factorio on your iPhone or iPad. You need iOS 17 or iPadOS 17 or newer, plus a gamepad or a keyboard and mouse. Touch supports menus, but not touch-only gameplay.
 
 You need your own copy of Factorio. You do not need Xcode or a Mac.
-Tested on Factorio 2.0.77. Other versions are untested and are not guaranteed to work.
+Tested on Factorio 2.0.77. The companion rejects executable versions that do not match the required startup patch.
 The executable and game data must use the same version.
 The companion supports Windows x64, Macs with Apple silicon, and Linux x64.
 
@@ -31,7 +31,8 @@ The log starts before the app opens its window and contains device details, star
 The app copies the log to `FactorioData` during use.
 If you cannot find the file, tap `Share log` on the setup screen.
 During a game, hold the keyboard button and tap `Share log` in the controls panel.
-The log keeps output across app restarts, so you can share it after a failed launch.
+The log keeps recent output across app restarts, so you can share it after a failed launch.
+The file stays below 4 MiB. Each launch records up to 1 MiB to preserve space for recent failures.
 
 FactorioPad keeps its own app folder hidden in Files.
 Keep `FactorioData` in a folder that you create under `On My iPhone`, `On My iPad`, or iCloud Drive.

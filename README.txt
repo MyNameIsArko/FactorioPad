@@ -12,7 +12,8 @@ Keep the selected folder on your device.
 If the game does not start, open your selected FactorioData folder in Files.
 Attach FactorioPad.log to your GitHub issue.
 If you cannot find it, tap "Share log" on the setup screen.
-The log keeps output across app restarts.
+The log keeps recent output across app restarts.
+The file stays below 4 MiB. Each launch records up to 1 MiB.
 Keep FactorioData in your own folder outside the app.
 
 You need iOS 17 or iPadOS 17 or newer, plus a gamepad or a keyboard and mouse.

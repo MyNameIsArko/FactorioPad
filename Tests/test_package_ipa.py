@@ -16,7 +16,7 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Tools"))
 from package_ipa import MARKER, app_prefix, arm64_slice, make_template, package, package_dmg, remove_signature
-from patch_factorio import CPU_TYPE_ARM64, MH_MAGIC_64, MH_DYLIB, LC_ID_DYLIB
+from patch_factorio import CPU_TYPE_ARM64, MH_MAGIC_64, MH_DYLIB, LC_ID_DYLIB, TRANSPARENT_TEXTURE, patch_transparent_texture
 
 
 def executable():
@@ -31,6 +31,7 @@ def executable():
     struct.pack_into("<IIIIIIII", data, 0, MH_MAGIC_64, CPU_TYPE_ARM64, 0, 2, 4, len(commands), 0, 0)
     data[32:32 + len(commands)] = commands
     data[1024:1041] = b"/etc/ssl/cert.pem\0"
+    data[1088:1088 + len(TRANSPARENT_TEXTURE)] = TRANSPARENT_TEXTURE
     return bytes(data)
 
 
@@ -51,6 +52,17 @@ def rejected(action):
 
 
 def main():
+    # Reject unknown code instead of changing an unrelated instruction sequence.
+    for invalid in (bytearray(), bytearray(TRANSPARENT_TEXTURE * 2), bytearray(b"x" + TRANSPARENT_TEXTURE)):
+        before = bytes(invalid)
+        rejected(lambda: patch_transparent_texture(invalid))
+        assert invalid == before
+    texture = bytearray(TRANSPARENT_TEXTURE)
+    patch_transparent_texture(texture)
+    instructions = struct.unpack("<22I", texture)
+    assert instructions[8] == 0x52800028  # BGRA8
+    assert instructions[18] == 0x52800041 and instructions[20] == 0x52800042  # 2x2, 16 bytes
+    assert sum(a != b for a, b in zip(struct.unpack("<22I", TRANSPARENT_TEXTURE), instructions)) == 3
     fixture_version = "9.8.7"
     thin = executable()
     for magic, format in [(0xCAFEBABE, ">IIIII"), (0xCAFEBABF, ">IIQQII")]:

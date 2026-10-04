@@ -23,7 +23,7 @@ int main(void)
             @"new installations must keep Factorio's default key bindings");
         NSString *oldControllerConfig = [defaults stringByAppendingFormat:@"\n[controls]\n%@\ncopy=ALT + C\n",
             [FactorioControllerBindings() componentsJoinedByString:@"\n"]];
-        NSString *upgrade = FactorioApplyControlSection(oldControllerConfig, @"[controls]",
+        NSString *upgrade = FactorioApplyConfigSection(oldControllerConfig, @"[controls]",
             FactorioControllerBindings(), NO);
         for (NSString *binding in FactorioControllerBindings()) {
             NSCAssert(![upgrade containsString:binding],
@@ -43,6 +43,22 @@ int main(void)
         NSString *customGraphics = @"[graphics]\nhigh-quality-animations=false\ntexture-compression-level=none\n";
         NSCAssert([FactorioUpdateConfigPaths(customGraphics, @"/new/read", @"/new/write") hasPrefix:customGraphics],
             @"saved graphics preferences must not be replaced by new defaults");
+        for (NSString *graphics in @[
+            @"[graphics]\ntexture-compression-level=high-quality\n[interface]\ncustom-ui-scale=1.25\n",
+            @"[graphics]\n texture-compression-level = high-quality \nhigh-quality-animations=false\n[interface]\ncustom-ui-scale=1.25\n",
+            @"[graphics]\nhigh-quality-animations=false\n[interface]\ncustom-ui-scale=1.25\n",
+            @"[interface]\ncustom-ui-scale=1.25\n"
+        ]) {
+            NSString *safe = FactorioApplyConfigSection(graphics, @"[graphics]",
+                @[@"texture-compression-level=none"], YES, YES);
+            NSCAssert([safe containsString:@"texture-compression-level=none"] &&
+                ![safe containsString:@"texture-compression-level=high-quality"] &&
+                ![safe containsString:@"texture-compression-level = high-quality"],
+                @"unsupported GPUs must disable compression in existing and new configurations");
+            NSCAssert([safe containsString:@"custom-ui-scale=1.25"], @"the GPU fallback must preserve unrelated preferences");
+            NSCAssert([FactorioApplyConfigSection(safe, @"[graphics]",
+                @[@"texture-compression-level=none"], YES, YES) isEqualToString:safe], @"the fallback must survive repeated launches");
+        }
         NSArray<NSString *> *examples = @[
             @"[path]\nread-data=/old\nwrite-data=/old-write\n[graphics]\nquality=high\n",
             @"[path]\n read-data = /old \n[graphics]\nquality=high\n",
