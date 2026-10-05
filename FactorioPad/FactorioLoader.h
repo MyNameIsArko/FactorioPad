@@ -5,11 +5,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface FactorioLoader : NSObject
 
-+ (nullable NSString *)gameDataProblem;
 + (nullable NSURL *)startupLogURL;
 + (void)restoreStartupLogFolder;
 + (void)logMessage:(NSString *)message;
-+ (BOOL)selectGameDataFromURL:(NSURL *)url error:(NSError **)error;
++ (BOOL)importSavedGameDataWithProgress:(void (^)(double fraction))progress error:(NSError **)error;
++ (BOOL)selectGameDataFromURL:(NSURL *)url progress:(void (^)(double fraction))progress error:(NSError **)error;
 + (void)startWithWindowSize:(CGSize)windowSize;
 
 @end

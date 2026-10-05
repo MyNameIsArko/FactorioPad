@@ -50,7 +50,8 @@ extension Notification.Name {
 struct FactorioLaunchView: View {
     private enum Stage { case gameSetup, openingGame, setup, syncing, playing, stopped }
 
-    @State private var stage = Stage.gameSetup
+    @State private var stage = Stage.openingGame
+    @State private var importProgress = 0.0
     @State private var showsControls = false
     @State private var showsSaves = false
     @State private var showsFolderPicker = false
@@ -80,16 +81,18 @@ struct FactorioLaunchView: View {
                 VStack(spacing: 20) {
                     Text("FactorioPad").font(.largeTitle.bold())
                     if stage == .gameSetup {
-                        Text("Choose your FactorioData folder.")
+                        Text("Import your FactorioData folder. You only need to do this once.")
                             .multilineTextAlignment(.center)
                         if let status { Text(status).foregroundStyle(.secondary) }
-                        Button("Choose game folder") {
+                        Button("Import game data") {
                             selectsGameFolder = true
                             showsFolderPicker = true
                         }
                         .buttonStyle(.borderedProminent)
                     } else if stage == .openingGame {
-                        ProgressView("Opening game folder…")
+                        ProgressView("Importing game data…", value: importProgress)
+                        Text(importProgress, format: .percent.precision(.fractionLength(0)))
+                            .foregroundStyle(.secondary)
                     } else if stage == .syncing {
                         ProgressView("Syncing saves…")
                     } else if stage == .stopped {
@@ -111,7 +114,6 @@ struct FactorioLaunchView: View {
                         } else {
                             Button("Play without sync") { stage = .playing }
                         }
-                        Button("Change game folder") { selectsGameFolder = true; showsFolderPicker = true }
                     }
                     if let log = FactorioLoader.startupLogURL() {
                         ShareLink("Share log", item: log)
@@ -124,10 +126,7 @@ struct FactorioLaunchView: View {
             }
         }
         .task {
-            FactorioLoader.logMessage("Checking the game folder")
-            status = FactorioLoader.gameDataProblem()
-            if let status { FactorioLoader.logMessage(status) }
-            else { stage = .setup }
+            await importGame(from: nil)
         }
         .onReceive(NotificationCenter.default.publisher(for: .factorioControlsRequested)) { _ in
             showsControls = true
@@ -148,7 +147,7 @@ struct FactorioLaunchView: View {
             do {
                 let folder = try result.get()
                 if selectsGameFolder {
-                    Task { await selectGame(folder) }
+                    Task { await importGame(from: folder) }
                     return
                 }
                 try FactorioSaveSync.saveFolder(folder)
@@ -171,15 +170,25 @@ struct FactorioLaunchView: View {
         } message: { Text(message ?? "") }
     }
 
-    private func selectGame(_ folder: URL) async {
+    private func importGame(from folder: URL?) async {
         stage = .openingGame
+        importProgress = 0
+        UIApplication.shared.isIdleTimerDisabled = true
+        defer { UIApplication.shared.isIdleTimerDisabled = false }
         do {
             try await Task.detached(priority: .userInitiated) {
-                try FactorioLoader.selectGameData(from: folder)
+                let progress: (Double) -> Void = { fraction in
+                    DispatchQueue.main.async { importProgress = fraction }
+                }
+                if let folder {
+                    try FactorioLoader.selectGameData(from: folder, progress: progress)
+                } else {
+                    try FactorioLoader.importSavedGameData(progress: progress)
+                }
             }.value
             status = nil
             stage = .setup
-            if FactorioSaveSync.hasFolder { await syncBeforePlay() }
+            if folder != nil && FactorioSaveSync.hasFolder { await syncBeforePlay() }
         } catch {
             FactorioLoader.logMessage(error.localizedDescription)
             status = error.localizedDescription

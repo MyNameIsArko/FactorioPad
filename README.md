@@ -16,9 +16,10 @@ The companion supports Windows x64, Macs with Apple silicon, and Linux x64.
 5. Click `Open result` when preparation finishes.
 6. Install `FactorioPad.ipa` with [Sideloadly](https://sideloadly.io/) on Windows or Mac, or [iloader](https://github.com/nab138/iloader) on Linux.
 7. Copy the generated `FactorioData` folder to Files on your iPhone or iPad.
-8. Open FactorioPad, tap `Choose game folder`, and select that folder.
+8. Open FactorioPad, tap `Import game data`, and select that folder.
 
-Keep the selected folder on your device. FactorioPad uses it without copying it.
+Wait for the import progress bar to finish. FactorioPad keeps its own copy for later launches.
+After import, you can remove the original folder. Use `Share log` if you remove it.
 Save sharing is optional. Choose `Play without sync` to start without it.
 
 Keep your generated IPA private because it contains your Factorio executable.
@@ -35,7 +36,8 @@ The log keeps recent output across app restarts, so you can share it after a fai
 
 FactorioPad keeps its own app folder hidden in Files.
 Keep `FactorioData` in a folder that you create under `On My iPhone`, `On My iPad`, or iCloud Drive.
-Existing game data inside the app stays available through its saved folder selection.
+The app imports existing game data once during the first launch after an update.
+Saves, mods, and configuration stay in `Library/Application Support/FactorioPad`.
 
 ## What changes on iPhone and iPad
 

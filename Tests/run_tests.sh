@@ -10,6 +10,9 @@ xcrun clang++ -fobjc-arc -fblocks -IFactorioCompat -framework Foundation -framew
     Tests/test_config.mm -o "$test_dir/config"
 "$test_dir/config"
 xcrun clang++ -fobjc-arc -fblocks -IFactorioCompat -framework Foundation -framework CoreGraphics \
+    Tests/test_import.mm -o "$test_dir/import"
+"$test_dir/import"
+xcrun clang++ -fobjc-arc -fblocks -IFactorioCompat -framework Foundation -framework CoreGraphics \
     Tests/test_logging.mm -o "$test_dir/logging"
 "$test_dir/logging"
 xcrun clang -fobjc-arc -fblocks -framework Foundation Tests/test_workspace.m -o "$test_dir/workspace"

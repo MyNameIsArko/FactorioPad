@@ -404,6 +404,13 @@ static NSString *FactorioDataProblem(NSString *path, NSString *guestVersion)
         ![files fileExistsAtPath:[path stringByAppendingPathComponent:@"cacert.pem"]]) {
         return @"Choose the FactorioData folder that contains base, core, and cacert.pem.";
     }
+    for (NSString *relative in @[@"core/prototypes/utility-sprites.lua", @"core/graphics/white-square.png",
+        @"core/graphics/icons/mip/feedback.png", @"core/graphics/missing-preview.png", @"base/sound/ambient/main-menu.ogg"]) {
+        NSDictionary *attributes = [files attributesOfItemAtPath:[path stringByAppendingPathComponent:relative] error:nil];
+        if (![attributes.fileType isEqualToString:NSFileTypeRegular] || !attributes.fileSize) {
+            return [NSString stringWithFormat:@"The game data is incomplete: %@ is missing or empty. Import a complete FactorioData folder.", relative];
+        }
+    }
     if (!guestVersion.length || ![version isEqualToString:guestVersion]) {
         return @"The game data and app executable use different Factorio versions. Package your matching Mac game files into a new IPA, then sideload it.";
     }
@@ -429,76 +436,184 @@ static NSError *FactorioGameDataError(NSString *message)
 
 static NSString *const FactorioGameFolderBookmark = @"FactorioGameFolderBookmark";
 
-static BOOL FactorioSelectGameData(NSURL *source, NSUserDefaults *preferences, NSString *version, NSError **error)
+typedef void (^FactorioImportProgress)(double fraction);
+
+static NSString *FactorioImportedDataPath(NSString *root)
 {
+    return [root stringByAppendingPathComponent:@"FactorioData"];
+}
+
+static BOOL FactorioRecoverImportedData(NSString *root, NSError **error)
+{
+    NSFileManager *files = NSFileManager.defaultManager;
+    NSString *destination = FactorioImportedDataPath(root);
+    NSString *previous = [root stringByAppendingPathComponent:@"FactorioData.previous"];
+    if ([files fileExistsAtPath:previous] && ![files fileExistsAtPath:destination]) {
+        if (![files moveItemAtPath:previous toPath:destination error:error]) { return NO; }
+    }
+    NSString *staging = [root stringByAppendingPathComponent:@"FactorioData.importing"];
+    return ![files fileExistsAtPath:staging] || [files removeItemAtPath:staging error:error];
+}
+
+static BOOL FactorioImportGameData(NSURL *source, NSString *root, NSString *version,
+    FactorioImportProgress progress, NSError **error)
+{
+    NSFileManager *files = NSFileManager.defaultManager;
+    NSString *destination = FactorioImportedDataPath(root);
+    NSString *staging = [root stringByAppendingPathComponent:@"FactorioData.importing"];
+    NSString *previous = [root stringByAppendingPathComponent:@"FactorioData.previous"];
     BOOL access = [source startAccessingSecurityScopedResource];
     __block NSError *failure = nil;
-    __block NSData *bookmark = nil;
+    __block BOOL imported = NO;
+    progress(0);
     @try {
+        if (!FactorioRecoverImportedData(root, &failure)) { return NO; }
         NSError *coordinationError = nil;
         [[[NSFileCoordinator alloc] initWithFilePresenter:nil] coordinateReadingItemAtURL:source
             options:0 error:&coordinationError byAccessor:^(NSURL *url) {
                 NSString *problem = FactorioDataProblem(url.path, version);
                 if (problem) { failure = FactorioGameDataError(problem); return; }
-                NSDirectoryEnumerator *entries = [NSFileManager.defaultManager enumeratorAtURL:url
-                    includingPropertiesForKeys:@[NSURLIsSymbolicLinkKey] options:0
+                if ([url.path.stringByResolvingSymlinksInPath isEqualToString:destination.stringByResolvingSymlinksInPath]) {
+                    imported = YES;
+                    return;
+                }
+                NSMutableArray<NSURL *> *items = [NSMutableArray array];
+                NSMutableArray<NSNumber *> *sizes = [NSMutableArray array];
+                unsigned long long total = 0;
+                NSArray *keys = @[NSURLIsSymbolicLinkKey, NSURLIsDirectoryKey, NSURLIsRegularFileKey, NSURLFileSizeKey];
+                NSDictionary *sourceValues = [url resourceValuesForKeys:keys error:&failure];
+                if (!sourceValues || [sourceValues[NSURLIsSymbolicLinkKey] boolValue]) {
+                    if (!failure) { failure = FactorioGameDataError(@"Choose a game data folder without symbolic links."); }
+                    return;
+                }
+                NSDirectoryEnumerator *entries = [files enumeratorAtURL:url includingPropertiesForKeys:keys options:0
                     errorHandler:^BOOL(NSURL *item, NSError *readError) { failure = readError; return NO; }];
                 for (NSURL *item in entries) {
-                    NSNumber *link = nil;
-                    if (![item getResourceValue:&link forKey:NSURLIsSymbolicLinkKey error:&failure]) { return; }
-                    if (link.boolValue) {
-                        failure = FactorioGameDataError(@"Choose a game data folder without symbolic links.");
+                    NSDictionary *values = [item resourceValuesForKeys:keys error:&failure];
+                    if (!values) { return; }
+                    if ([values[NSURLIsSymbolicLinkKey] boolValue] ||
+                        (![values[NSURLIsDirectoryKey] boolValue] && ![values[NSURLIsRegularFileKey] boolValue])) {
+                        failure = FactorioGameDataError(@"Choose a game data folder with regular files and no symbolic links.");
                         return;
                     }
+                    // Old diagnostic logs can be much larger than the game files.
+                    if ([item.lastPathComponent isEqualToString:@"FactorioPad.log"] ||
+                        [item.lastPathComponent isEqualToString:@".DS_Store"]) { continue; }
+                    unsigned long long size = [values[NSURLIsDirectoryKey] boolValue] ? 0 : [values[NSURLFileSizeKey] unsignedLongLongValue];
+                    [items addObject:item];
+                    [sizes addObject:@(size)];
+                    total += size;
                 }
-                if (!failure) {
-                    bookmark = [url bookmarkDataWithOptions:NSURLBookmarkCreationMinimalBookmark
-                        includingResourceValuesForKeys:nil relativeToURL:nil error:&failure];
+                if (failure) { return; }
+                if ([files fileExistsAtPath:staging] && ![files removeItemAtPath:staging error:&failure]) { return; }
+                if (![files createDirectoryAtPath:staging withIntermediateDirectories:YES attributes:nil error:&failure]) { return; }
+                FactorioLog([NSString stringWithFormat:@"Importing %lu items (%llu bytes) into %@", (unsigned long)items.count, total, destination]);
+                unsigned long long copied = 0;
+                double reported = 0;
+                for (NSUInteger index = 0; index < items.count; index++) {
+                    @autoreleasepool {
+                        NSURL *item = items[index];
+                        NSString *relative = [item.path.stringByResolvingSymlinksInPath
+                            substringFromIndex:url.path.stringByResolvingSymlinksInPath.length + 1];
+                        NSString *target = [staging stringByAppendingPathComponent:relative];
+                        NSNumber *directory = nil;
+                        if (![item getResourceValue:&directory forKey:NSURLIsDirectoryKey error:&failure]) { return; }
+                        if (directory.boolValue) {
+                            if (![files createDirectoryAtPath:target withIntermediateDirectories:YES attributes:nil error:&failure]) { return; }
+                        } else {
+                            if (![files createDirectoryAtPath:target.stringByDeletingLastPathComponent
+                                withIntermediateDirectories:YES attributes:nil error:&failure] ||
+                                ![files copyItemAtPath:item.path toPath:target error:&failure]) { return; }
+                            NSDictionary *attributes = [files attributesOfItemAtPath:target error:&failure];
+                            if (!attributes) { return; }
+                            if (attributes.fileSize != sizes[index].unsignedLongLongValue) {
+                                failure = FactorioGameDataError(@"The game files changed during import. Choose the folder again.");
+                                return;
+                            }
+                            copied += attributes.fileSize;
+                        }
+                        double fraction = total ? (double)copied / (double)total : 0;
+                        if (fraction - reported >= 0.01) { progress(MIN(fraction, 0.99)); reported = fraction; }
+                    }
                 }
+                problem = FactorioDataProblem(staging, version);
+                if (problem) { failure = FactorioGameDataError(problem); return; }
+                if ([files fileExistsAtPath:previous] && ![files removeItemAtPath:previous error:&failure]) { return; }
+                BOOL replacing = [files fileExistsAtPath:destination];
+                if (replacing && ![files moveItemAtPath:destination toPath:previous error:&failure]) { return; }
+                if (![files moveItemAtPath:staging toPath:destination error:&failure]) {
+                    if (replacing) {
+                        NSError *restoreError = nil;
+                        if (![files moveItemAtPath:previous toPath:destination error:&restoreError]) {
+                            FactorioLog([NSString stringWithFormat:@"Previous game data remains at %@: %@", previous, restoreError]);
+                        }
+                    }
+                    return;
+                }
+                imported = YES;
+                [files removeItemAtPath:previous error:nil];
             }];
         if (!failure) { failure = coordinationError; }
-        if (!bookmark || failure) { return NO; }
-        [preferences setObject:bookmark forKey:FactorioGameFolderBookmark];
-        return YES;
+        if (imported && !failure) {
+            progress(1);
+            FactorioLog(@"Game data import complete");
+            return YES;
+        }
+        return NO;
     } @finally {
+        [files removeItemAtPath:staging error:nil];
         if (access) { [source stopAccessingSecurityScopedResource]; }
         if (failure && error) { *error = failure; }
     }
 }
 
-// The caller holds folder access until the game finishes reading its files.
-static NSURL *FactorioOpenGameData(NSUserDefaults *preferences, NSString *bundleRoot,
-    NSString *documentsRoot, NSString *version, BOOL *access, NSError **error)
+static NSURL *FactorioOpenImportedData(NSString *root, NSString *version, NSError **error)
 {
-    *access = NO;
+    if (!FactorioRecoverImportedData(root, error)) { return nil; }
+    NSString *path = FactorioImportedDataPath(root);
+    NSString *problem = FactorioDataProblem(path, version);
+    if (problem) { if (error) { *error = FactorioGameDataError(problem); } return nil; }
+    [NSFileManager.defaultManager removeItemAtPath:[root stringByAppendingPathComponent:@"FactorioData.previous"] error:nil];
+    return [NSURL fileURLWithPath:path isDirectory:YES];
+}
+
+static BOOL FactorioRestoreGameData(NSUserDefaults *preferences, NSString *root, NSString *bundleRoot,
+    NSString *documentsRoot, NSString *version, FactorioImportProgress progress, NSError **error)
+{
+    if (!FactorioRecoverImportedData(root, error)) { return NO; }
+    if ([NSFileManager.defaultManager fileExistsAtPath:FactorioImportedDataPath(root)]) {
+        return FactorioOpenImportedData(root, version, error) != nil;
+    }
+    NSURL *source = nil;
     NSData *bookmark = [preferences dataForKey:FactorioGameFolderBookmark];
-    if (!bookmark) {
+    if (bookmark) {
+        source = [NSURL URLByResolvingBookmarkData:bookmark options:0 relativeToURL:nil
+            bookmarkDataIsStale:nil error:error];
+        if (!source) { return NO; }
+    } else {
         NSString *message = nil;
         NSString *path = FactorioReadDataPath(bundleRoot, documentsRoot, version, &message);
-        if (!path) { if (error) { *error = FactorioGameDataError(message); } return nil; }
-        return [NSURL fileURLWithPath:path isDirectory:YES];
+        if (!path) { if (error) { *error = FactorioGameDataError(message); } return NO; }
+        source = [NSURL fileURLWithPath:path isDirectory:YES];
     }
-    BOOL stale = NO;
-    NSURL *url = [NSURL URLByResolvingBookmarkData:bookmark options:0 relativeToURL:nil
-        bookmarkDataIsStale:&stale error:error];
-    if (!url) { return nil; }
-    BOOL opened = [url startAccessingSecurityScopedResource];
-    BOOL ready = NO;
-    @try {
-        NSString *problem = FactorioDataProblem(url.path, version);
-        if (problem) { if (error) { *error = FactorioGameDataError(problem); } return nil; }
-        if (stale) {
-            NSData *updated = [url bookmarkDataWithOptions:NSURLBookmarkCreationMinimalBookmark
-                includingResourceValuesForKeys:nil relativeToURL:nil error:error];
-            if (!updated) { return nil; }
-            [preferences setObject:updated forKey:FactorioGameFolderBookmark];
-        }
-        ready = YES;
-        *access = opened;
-        return url;
-    } @finally {
-        if (opened && !ready) { [url stopAccessingSecurityScopedResource]; }
+    return FactorioImportGameData(source, root, version, progress, error);
+}
+
+static BOOL FactorioDisableForcedTextureCompression(NSString *readDataPath, NSError **error)
+{
+    NSString *path = [readDataPath stringByAppendingPathComponent:@"core/prototypes/utility-sprites.lua"];
+    NSString *sprites = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:error];
+    if (!sprites) { return NO; }
+    // The core white_mask forces BC5 even when texture-compression-level is none.
+    NSString *safe = [sprites stringByReplacingOccurrencesOfString:@", \"always-compressed\"" withString:@""];
+    if ([safe containsString:@"\"always-compressed\""]) {
+        if (error) { *error = FactorioGameDataError(@"The game data uses an unsupported forced texture compression flag."); }
+        return NO;
     }
+    if ([safe isEqualToString:sprites]) { return YES; }
+    if (![safe writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:error]) { return NO; }
+    FactorioLog(@"Removed forced compression from core utility sprites");
+    return YES;
 }
 
 #ifndef FACTORIO_CONFIG_TEST
@@ -558,6 +673,10 @@ static NSString *FactorioPrepareWritableData(NSString *readDataPath)
     if (!compressedTextures) {
         config = FactorioApplyConfigSection(config, @"[graphics]",
             @[@"texture-compression-level=none"], YES, YES);
+        if (!FactorioDisableForcedTextureCompression(readDataPath, &error)) {
+            FactorioReportError(error.localizedDescription);
+            return nil;
+        }
         FactorioLog(@"Disabled texture compression for this GPU");
     }
 
@@ -652,35 +771,31 @@ static void *FactorioOpenFramework(NSString *name, int flags)
     else { FactorioLog([NSString stringWithFormat:@"Cannot restore the log folder: %@", error.localizedDescription]); }
 }
 
-+ (NSString *)gameDataProblem
++ (BOOL)importSavedGameDataWithProgress:(FactorioImportProgress)progress error:(NSError **)error
 {
     NSString *version = [self guestVersion];
     if (!version.length) {
-        return @"This app template needs your Factorio executable. Use the packaging tool on your computer, then sideload the resulting IPA.";
+        if (error) { *error = FactorioGameDataError(@"This app template needs your Factorio executable. Use the packaging tool on your computer, then sideload the resulting IPA."); }
+        return NO;
     }
-    // Preserve older imports now that Documents is hidden from Files.
-    if (![NSUserDefaults.standardUserDefaults dataForKey:FactorioGameFolderBookmark]) {
-        NSURL *legacy = [[self documentsFolder] URLByAppendingPathComponent:@"FactorioData" isDirectory:YES];
-        if ([NSFileManager.defaultManager fileExistsAtPath:legacy.path]) {
-            NSError *error = nil;
-            if (![self selectGameDataFromURL:legacy error:&error]) { return error.localizedDescription; }
-        }
-    }
-    NSError *error = nil;
-    BOOL access = NO;
-    NSURL *url = FactorioOpenGameData(NSUserDefaults.standardUserDefaults,
-        NSBundle.mainBundle.bundlePath, [self documentsFolder].path, version, &access, &error);
-    if (access) { [url stopAccessingSecurityScopedResource]; }
-    return error.localizedDescription;
+    return FactorioRestoreGameData(NSUserDefaults.standardUserDefaults, FactorioWritableRoot(),
+        NSBundle.mainBundle.bundlePath, [self documentsFolder].path, version, progress, error);
 }
 
-+ (BOOL)selectGameDataFromURL:(NSURL *)url error:(NSError **)error
++ (BOOL)selectGameDataFromURL:(NSURL *)url progress:(FactorioImportProgress)progress error:(NSError **)error
 {
-    FactorioLog(@"Selecting the game folder");
-    BOOL selected = FactorioSelectGameData(url, NSUserDefaults.standardUserDefaults, [self guestVersion], error);
-    if (selected) { [self shareStartupLogWithFolder:url]; }
-    else if (error && *error) { FactorioLog((*error).localizedDescription); }
-    return selected;
+    BOOL imported = FactorioImportGameData(url, FactorioWritableRoot(), [self guestVersion], progress, error);
+    if (imported) {
+        // Keep the original folder only for an optional copy of the diagnostic log.
+        BOOL access = [url startAccessingSecurityScopedResource];
+        NSData *bookmark = [url bookmarkDataWithOptions:NSURLBookmarkCreationMinimalBookmark
+            includingResourceValuesForKeys:nil relativeToURL:nil error:nil];
+        if (access) { [url stopAccessingSecurityScopedResource]; }
+        if (bookmark) { [NSUserDefaults.standardUserDefaults setObject:bookmark forKey:FactorioGameFolderBookmark]; }
+        else { [NSUserDefaults.standardUserDefaults removeObjectForKey:FactorioGameFolderBookmark]; }
+        [self shareStartupLogWithFolder:url];
+    } else if (error && *error) { FactorioLog((*error).localizedDescription); }
+    return imported;
 }
 
 + (void)startWithWindowSize:(CGSize)windowSize
@@ -694,127 +809,115 @@ static void *FactorioOpenFramework(NSString *name, int flags)
         return;
     }
     NSError *dataError = nil;
-    BOOL access = NO;
-    NSURL *dataURL = FactorioOpenGameData(NSUserDefaults.standardUserDefaults,
-        NSBundle.mainBundle.bundlePath, [self documentsFolder].path, guestVersion, &access, &dataError);
+    NSURL *dataURL = FactorioOpenImportedData(FactorioWritableRoot(), guestVersion, &dataError);
     if (!dataURL) {
         FactorioReportError(dataError.localizedDescription);
         return;
     }
-    BOOL threadStarted = NO;
-    @try {
-        NSString *readDataPath = dataURL.path;
-        FactorioLog([NSString stringWithFormat:@"Factorio %@; Viewport: %.0fx%.0f",
-            guestVersion, windowSize.width, windowSize.height]);
-        FactorioLog(@"Preparing game configuration");
-        NSString *configPath = FactorioPrepareWritableData(readDataPath);
-        if (!configPath) {
-            return;
-        }
+    NSString *readDataPath = dataURL.path;
+    FactorioLog([NSString stringWithFormat:@"Factorio %@; Viewport: %.0fx%.0f",
+        guestVersion, windowSize.width, windowSize.height]);
+    FactorioLog(@"Preparing game configuration");
+    NSString *configPath = FactorioPrepareWritableData(readDataPath);
+    if (!configPath) {
+        return;
+    }
 
-        NSString *writeRoot = configPath.stringByDeletingLastPathComponent.stringByDeletingLastPathComponent;
-        NSString *modsPath = [writeRoot stringByAppendingPathComponent:@"mods"];
+    NSString *writeRoot = configPath.stringByDeletingLastPathComponent.stringByDeletingLastPathComponent;
+    NSString *modsPath = [writeRoot stringByAppendingPathComponent:@"mods"];
 
-        FactorioLog(@"Loading FactorioCompat");
-        void *compat = FactorioOpenFramework(@"FactorioCompat", RTLD_NOW | RTLD_GLOBAL);
-        if (!compat) {
-            return;
-        }
+    FactorioLog(@"Loading FactorioCompat");
+    void *compat = FactorioOpenFramework(@"FactorioCompat", RTLD_NOW | RTLD_GLOBAL);
+    if (!compat) {
+        return;
+    }
 
-        FactorioLog(@"Loading FactorioGuest");
-        void *guest = FactorioOpenFramework(@"FactorioGuest", RTLD_NOW | RTLD_LOCAL);
-        if (!guest) {
-            return;
-        }
+    FactorioLog(@"Loading FactorioGuest");
+    void *guest = FactorioOpenFramework(@"FactorioGuest", RTLD_NOW | RTLD_LOCAL);
+    if (!guest) {
+        return;
+    }
 
-        FactorioLog(@"Preparing input");
-        if (!FactorioKeyboardBridgeSetGuestHandle(guest)) {
-            FactorioReportError(@"This Factorio game file does not provide compatible input functions.");
-            return;
-        }
-        FactorioControllerBridgeStart();
-        FactorioControllerBridgeSetViewportSize(windowSize.width, windowSize.height);
+    FactorioLog(@"Preparing input");
+    if (!FactorioKeyboardBridgeSetGuestHandle(guest)) {
+        FactorioReportError(@"This Factorio game file does not provide compatible input functions.");
+        return;
+    }
+    FactorioControllerBridgeStart();
+    FactorioControllerBridgeSetViewportSize(windowSize.width, windowSize.height);
 
-        typedef int (*FactorioMainFunction)(int, char **);
-        dlerror();
-        FactorioMainFunction factorioMain = (FactorioMainFunction)dlsym(guest, "main");
-        if (!factorioMain) {
-            FactorioLog([NSString stringWithFormat:@"Factorio main is missing: %s", dlerror()]);
-            FactorioReportError(@"The Factorio game file is not compatible with this app.");
-            return;
-        }
+    typedef int (*FactorioMainFunction)(int, char **);
+    dlerror();
+    FactorioMainFunction factorioMain = (FactorioMainFunction)dlsym(guest, "main");
+    if (!factorioMain) {
+        FactorioLog([NSString stringWithFormat:@"Factorio main is missing: %s", dlerror()]);
+        FactorioReportError(@"The Factorio game file is not compatible with this app.");
+        return;
+    }
 
-        CGFloat width = MAX(windowSize.width, 1.0);
-        CGFloat height = MAX(windowSize.height, 1.0);
-        NSString *windowSizeArgument = [NSString stringWithFormat:@"%ldx%ld",
-            lround(width), lround(height)];
+    CGFloat width = MAX(windowSize.width, 1.0);
+    CGFloat height = MAX(windowSize.height, 1.0);
+    NSString *windowSizeArgument = [NSString stringWithFormat:@"%ldx%ld",
+        lround(width), lround(height)];
 
-        NSArray<NSString *> *arguments = @[
-            @"factorio",
-            @"--config", configPath,
-            @"--mod-directory", modsPath,
-            @"--no-log-rotation",
-            @"--force-metal",
-            @"--fullscreen=false",
-            @"--window-size", windowSizeArgument,
-            @"--nogamepad",
-            @"--single-thread-loading"
-        ];
+    NSArray<NSString *> *arguments = @[
+        @"factorio",
+        @"--config", configPath,
+        @"--mod-directory", modsPath,
+        @"--no-log-rotation",
+        @"--force-metal",
+        @"--fullscreen=false",
+        @"--window-size", windowSizeArgument,
+        @"--nogamepad",
+        @"--single-thread-loading"
+    ];
 
-        NSThread *thread = [[NSThread alloc] initWithBlock:^{
-            @autoreleasepool {
-                @try {
-                    if (chdir(readDataPath.fileSystemRepresentation) != 0) {
-                        int savedErrno = errno;
-                        FactorioLog([NSString stringWithFormat:@"Cannot set the working directory: %s", strerror(savedErrno)]);
-                        FactorioReportError(@"Factorio cannot open its game folder.");
-                        return;
-                    }
+    NSThread *thread = [[NSThread alloc] initWithBlock:^{
+        @autoreleasepool {
+            if (chdir(readDataPath.fileSystemRepresentation) != 0) {
+                int savedErrno = errno;
+                FactorioLog([NSString stringWithFormat:@"Cannot set the working directory: %s", strerror(savedErrno)]);
+                FactorioReportError(@"Factorio cannot open its game folder.");
+                return;
+            }
 
-                    int argumentCount = (int)arguments.count;
-                    char **argumentValues = (char **)calloc((size_t)argumentCount + 1, sizeof(char *));
-                    if (!argumentValues) {
-                        FactorioReportError(@"Factorio does not have enough memory to start.");
-                        return;
-                    }
+            int argumentCount = (int)arguments.count;
+            char **argumentValues = (char **)calloc((size_t)argumentCount + 1, sizeof(char *));
+            if (!argumentValues) {
+                FactorioReportError(@"Factorio does not have enough memory to start.");
+                return;
+            }
 
-                    for (int index = 0; index < argumentCount; index++) {
-                        argumentValues[index] = strdup(arguments[(NSUInteger)index].fileSystemRepresentation);
-                        if (!argumentValues[index]) {
-                            for (int previous = 0; previous < index; previous++) {
-                                free(argumentValues[previous]);
-                            }
-                            free(argumentValues);
-                            FactorioReportError(@"Factorio does not have enough memory to start.");
-                            return;
-                        }
-                    }
-
-                    FactorioLog(@"Starting Factorio main");
-                    int result = factorioMain(argumentCount, argumentValues);
-
-                    for (int index = 0; index < argumentCount; index++) {
-                        free(argumentValues[index]);
+            for (int index = 0; index < argumentCount; index++) {
+                argumentValues[index] = strdup(arguments[(NSUInteger)index].fileSystemRepresentation);
+                if (!argumentValues[index]) {
+                    for (int previous = 0; previous < index; previous++) {
+                        free(argumentValues[previous]);
                     }
                     free(argumentValues);
-
-                    FactorioLog([NSString stringWithFormat:@"Factorio stopped with status %d", result]);
-                    FactorioControllerBridgeSetActive(NO);
-                    FactorioReportError(result == 0 ? @"Factorio stopped. Close and reopen the app to play again."
-                        : @"Factorio stopped because of an error. Close and reopen the app to try again.");
-                } @finally {
-                    if (access) { [dataURL stopAccessingSecurityScopedResource]; }
+                    FactorioReportError(@"Factorio does not have enough memory to start.");
+                    return;
                 }
             }
-        }];
 
-        thread.name = @"FactorioMainThread";
-        thread.stackSize = 8 * 1024 * 1024;
-        [thread start];
-        threadStarted = YES;
-    } @finally {
-        if (access && !threadStarted) { [dataURL stopAccessingSecurityScopedResource]; }
-    }
+            FactorioLog(@"Starting Factorio main");
+            int result = factorioMain(argumentCount, argumentValues);
+
+            for (int index = 0; index < argumentCount; index++) {
+                free(argumentValues[index]);
+            }
+            free(argumentValues);
+
+            FactorioLog([NSString stringWithFormat:@"Factorio stopped with status %d", result]);
+            FactorioControllerBridgeSetActive(NO);
+            FactorioReportError(result == 0 ? @"Factorio stopped. Close and reopen the app to play again."
+                : @"Factorio stopped because of an error. Close and reopen the app to try again.");
+        }
+    }];
+
+    thread.name = @"FactorioMainThread";
+    thread.stackSize = 8 * 1024 * 1024;
+    [thread start];
 }
 
 @end
