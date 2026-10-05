@@ -5,7 +5,7 @@
 	<key>FactorioPadExternalDataVersion</key>
 	<integer>1</integer>
 	<key>UIFileSharingEnabled</key>
-	<false/>
+	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>GCSupportedGameControllers</key>

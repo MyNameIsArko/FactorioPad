@@ -85,7 +85,7 @@ def main():
         prefix = "Payload/FactorioPad.app/"
         with zipfile.ZipFile(source, "w") as archive:
             archive.writestr(prefix + "FactorioPad", b"compiled host")
-            archive.writestr(prefix + "Info.plist", plistlib.dumps({"FactorioPadExternalDataVersion": 1,
+            archive.writestr(prefix + "Info.plist", plistlib.dumps({"FactorioPadExternalDataVersion": 1, "UIFileSharingEnabled": False,
                 "CFBundleIcons": {"CFBundlePrimaryIcon": {"CFBundleIconName": "AppIcon"}}}))
             archive.writestr(prefix + "Frameworks/FactorioCompat.framework/FactorioCompat", b"compiled shims")
             archive.writestr("Payload/", b"")
@@ -102,7 +102,7 @@ def main():
             assert archive.read(prefix + "Assets.car") == b"private content"
             assert archive.read(prefix + "AppIcon60x60@2x.png") == b"private content"
             info = plistlib.loads(archive.read(prefix + "Info.plist"))
-            assert not info["UIFileSharingEnabled"] and info["LSSupportsOpeningDocumentsInPlace"]
+            assert info["UIFileSharingEnabled"] and info["LSSupportsOpeningDocumentsInPlace"]
             assert info["CFBundleIcons"]["CFBundlePrimaryIcon"]["CFBundleIconName"] == "AppIcon"
         rejected(lambda: make_template(source, template))
         app = root / "factorio.app"
@@ -122,6 +122,8 @@ def main():
         with zipfile.ZipFile(result / "FactorioPad.ipa") as archive:
             assert archive.read(prefix + "Assets.car") == b"private content"
             assert plistlib.loads(archive.read(prefix + "Info.plist"))["CFBundleIcons"]["CFBundlePrimaryIcon"]["CFBundleIconName"] == "AppIcon"
+            info = plistlib.loads(archive.read(prefix + "Info.plist"))
+            assert info["UIFileSharingEnabled"] and info["LSSupportsOpeningDocumentsInPlace"]
             binary = archive.read(prefix + "Frameworks/FactorioGuest.framework/FactorioGuest")
             assert struct.unpack_from("<I", binary, 12)[0] == MH_DYLIB
             assert LC_ID_DYLIB in commands(binary) and 0x1D not in commands(binary)

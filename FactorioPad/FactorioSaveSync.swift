@@ -33,8 +33,8 @@ nonisolated enum FactorioSaveSync {
         if stale { try saveFolder(shared) }
 
         let manager = FileManager.default
-        let local = manager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appending(path: "FactorioPad/saves", directoryHint: .isDirectory)
+        let local = manager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appending(path: "saves", directoryHint: .isDirectory)
         try synchronize(local: local, shared: shared)
     }
 

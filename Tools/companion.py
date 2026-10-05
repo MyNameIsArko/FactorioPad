@@ -137,7 +137,7 @@ class Companion:
                 self.output = value
                 self.open_button.configure(state="normal")
                 self.status.set("Your app is ready. Click Open result to see the files.")
-                self.instructions.set("Install FactorioPad.ipa with your sideloading tool.\nTransfer FactorioData to Files on your iPhone or iPad.\nOpen FactorioPad and choose that folder. Keep the selected folder on your device.")
+                self.instructions.set("Install FactorioPad.ipa with your sideloading tool.\nTransfer FactorioData to Files on your iPhone or iPad.\nOpen FactorioPad and import that folder. After import finishes, you can remove the original folder.")
             else:
                 self.status.set("Preparation failed. Select another DMG or destination and try again.")
                 messagebox.showerror("Cannot prepare FactorioPad", value, parent=self.window)

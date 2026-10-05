@@ -26,15 +26,18 @@ int main(void)
     @autoreleasepool {
         NSFileManager *files = NSFileManager.defaultManager;
         NSString *temporary = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
-        NSString *root = [temporary stringByAppendingPathComponent:@"Application Support/FactorioPad"];
+        NSString *root = [temporary stringByAppendingPathComponent:@"Documents"];
+        NSCAssert([FactorioWritableRoot() isEqualToString:[files URLsForDirectory:NSDocumentDirectory
+            inDomains:NSUserDomainMask].firstObject.path], @"the app must store files directly in Documents");
+        NSString *oldRoot = [temporary stringByAppendingPathComponent:@"Library/Application Support/FactorioPad"];
+        MakeGameData(FactorioImportedDataPath(oldRoot));
+        NSString *oldSave = [oldRoot stringByAppendingPathComponent:@"saves/old.zip"];
+        [files createDirectoryAtPath:oldSave.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
+        [@"old save" writeToFile:oldSave atomically:YES encoding:NSUTF8StringEncoding error:nil];
         NSString *sourcePath = [temporary stringByAppendingPathComponent:@"Inbox/FactorioData"];
         NSString *destination = FactorioImportedDataPath(root);
         NSURL *source = [NSURL fileURLWithPath:sourcePath isDirectory:YES];
         MakeGameData(sourcePath);
-        NSString *suite = [@"FactorioImportTests-" stringByAppendingString:NSUUID.UUID.UUIDString];
-        NSUserDefaults *preferences = [[NSUserDefaults alloc] initWithSuiteName:suite];
-        [preferences setObject:[source bookmarkDataWithOptions:NSURLBookmarkCreationMinimalBookmark
-            includingResourceValuesForKeys:nil relativeToURL:nil error:nil] forKey:FactorioGameFolderBookmark];
         NSString *save = [root stringByAppendingPathComponent:@"saves/existing.zip"];
         [files createDirectoryAtPath:save.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
         [@"keep my save" writeToFile:save atomically:YES encoding:NSUTF8StringEncoding error:nil];
@@ -50,8 +53,16 @@ int main(void)
             reports++;
         };
         NSError *error = nil;
-        NSCAssert(FactorioRestoreGameData(preferences, root, @"/missing", @"/missing", @"2.0.77", progress, &error),
-            @"an existing external bookmark must migrate to a permanent copy");
+        NSCAssert(!FactorioRestoreGameData(root, @"/missing", @"2.0.77", ^(double) {}, &error) && error,
+            @"old Application Support data must not satisfy a fresh Documents installation");
+        NSCAssert(![files fileExistsAtPath:destination] &&
+            ![files fileExistsAtPath:[root stringByAppendingPathComponent:@"saves/old.zip"]] &&
+            [[NSString stringWithContentsOfFile:oldSave encoding:NSUTF8StringEncoding error:nil] isEqualToString:@"old save"] &&
+            !FactorioDataProblem(FactorioImportedDataPath(oldRoot), @"2.0.77"),
+            @"v2.1 must leave old assets and saves intact without copying them");
+        error = nil;
+        NSCAssert(FactorioImportGameData(source, root, @"2.0.77", progress, &error),
+            @"a manual import must create a permanent Documents copy");
         NSCAssert(lastProgress == 1 && reports > 2, @"copy progress must include intermediate updates");
         NSCAssert([[files contentsAtPath:[destination stringByAppendingPathComponent:@"base/sound/ambient/main-menu.ogg"]]
             isEqual:[files contentsAtPath:[sourcePath stringByAppendingPathComponent:@"base/sound/ambient/main-menu.ogg"]]],
@@ -67,10 +78,9 @@ int main(void)
         NSCAssert(FactorioDisableForcedTextureCompression(destination, &error) &&
             [[NSString stringWithContentsOfFile:spritePath encoding:NSUTF8StringEncoding error:nil] isEqualToString:safe], @"the fallback must survive reopening");
         [files removeItemAtURL:source error:nil];
-        [preferences setObject:[@"expired bookmark" dataUsingEncoding:NSUTF8StringEncoding] forKey:FactorioGameFolderBookmark];
-        NSCAssert(FactorioRestoreGameData(preferences, root, @"/missing", @"/missing", @"2.0.77", ^(double) {
-            NSCAssert(NO, @"later launches must not copy or resolve the old folder");
-        }, &error), @"launch must work after the Inbox folder and bookmark disappear");
+        NSCAssert(FactorioRestoreGameData(root, @"/missing", @"2.0.77", ^(double) {
+            NSCAssert(NO, @"later launches must not copy the old folder");
+        }, &error), @"launch must work after the Inbox folder disappears");
         NSCAssert(FactorioOpenImportedData(root, @"2.0.77", &error), @"gameplay must use the private copy");
         error = nil;
         NSCAssert(!FactorioOpenImportedData(root, @"2.0.78", &error) && error, @"mismatched data must stop startup");
@@ -108,11 +118,8 @@ int main(void)
         NSCAssert(FactorioOpenImportedData(root, @"2.0.77", &error), @"recover the previous import if the app closes during replacement");
         NSCAssert([[NSString stringWithContentsOfFile:save encoding:NSUTF8StringEncoding error:nil] isEqualToString:@"keep my save"],
             @"imports and recovery must leave existing saves intact");
-        // An old self-contained IPA must also migrate, without an external bookmark.
-        [preferences removeObjectForKey:FactorioGameFolderBookmark];
-        NSCAssert(FactorioRestoreGameData(preferences, [temporary stringByAppendingPathComponent:@"legacy"],
-            sourcePath.stringByDeletingLastPathComponent, @"/missing", @"2.0.77", ^(double) {}, &error), @"migrate bundled legacy game data");
-        [preferences removePersistentDomainForName:suite];
+        NSCAssert(FactorioRestoreGameData([temporary stringByAppendingPathComponent:@"DevelopmentDocuments"],
+            sourcePath.stringByDeletingLastPathComponent, @"2.0.77", ^(double) {}, &error), @"development builds must import their bundled data");
         [files removeItemAtPath:temporary error:nil];
         puts("Factorio data import and compression tests passed.");
     }

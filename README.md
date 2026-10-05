@@ -19,25 +19,10 @@ The companion supports Windows x64, Macs with Apple silicon, and Linux x64.
 8. Open FactorioPad, tap `Import game data`, and select that folder.
 
 Wait for the import progress bar to finish. FactorioPad keeps its own copy for later launches.
-After import, you can remove the original folder. Use `Share log` if you remove it.
+After import, you can remove the original folder.
 Save sharing is optional. Choose `Play without sync` to start without it.
 
 Keep your generated IPA private because it contains your Factorio executable.
-
-## Report a startup problem
-
-If the game stays black or stops during startup, open your selected `FactorioData` folder in Files.
-Attach `FactorioPad.log` to your GitHub issue.
-The log starts before the app opens its window and contains device details, startup steps, and game output.
-The app copies the log to `FactorioData` during use.
-If you cannot find the file, tap `Share log` on the setup screen.
-During a game, hold the keyboard button and tap `Share log` in the controls panel.
-The log keeps recent output across app restarts, so you can share it after a failed launch.
-
-FactorioPad keeps its own app folder hidden in Files.
-Keep `FactorioData` in a folder that you create under `On My iPhone`, `On My iPad`, or iCloud Drive.
-The app imports existing game data once during the first launch after an update.
-Saves, mods, and configuration stay in `Library/Application Support/FactorioPad`.
 
 ## What changes on iPhone and iPad
 
@@ -66,3 +51,9 @@ bash Tools/link_macos_saves.sh
 ```
 
 For development, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Report a crash
+
+If the app or game crashes, reopen FactorioPad.
+Tap `Share log` on the setup screen.
+Attach `FactorioPad.log` to your GitHub issue.

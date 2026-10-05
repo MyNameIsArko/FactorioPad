@@ -18,7 +18,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static NSString *const FactorioDataDirectoryName = @"FactorioPad";
 static NSURL *FactorioStartupLog;
 static NSURL *FactorioSharedLogFolder;
 static BOOL FactorioSharedLogAccess;
@@ -155,12 +154,8 @@ static void FactorioConfigureEnvironment(void)
 
 static NSString *FactorioWritableRoot(void)
 {
-    NSURL *applicationSupport = [NSFileManager.defaultManager
-        URLsForDirectory:NSApplicationSupportDirectory
-        inDomains:NSUserDomainMask].firstObject;
-
-    return [applicationSupport.path
-        stringByAppendingPathComponent:FactorioDataDirectoryName];
+    return [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory
+        inDomains:NSUserDomainMask].firstObject.path;
 }
 
 static BOOL FactorioCopyStartupLog(NSURL *source, NSURL *folder, NSError **error)
@@ -417,17 +412,6 @@ static NSString *FactorioDataProblem(NSString *path, NSString *guestVersion)
     return nil;
 }
 
-static NSString *FactorioReadDataPath(NSString *bundleRoot, NSString *documentsRoot,
-    NSString *guestVersion, NSString **message)
-{
-    NSString *path = [documentsRoot stringByAppendingPathComponent:@"FactorioData"];
-    if (![NSFileManager.defaultManager fileExistsAtPath:path]) {
-        path = [bundleRoot stringByAppendingPathComponent:@"FactorioData"];
-    }
-    *message = FactorioDataProblem(path, guestVersion);
-    return *message ? nil : path;
-}
-
 static NSError *FactorioGameDataError(NSString *message)
 {
     return [NSError errorWithDomain:@"FactorioGameData" code:1
@@ -577,25 +561,15 @@ static NSURL *FactorioOpenImportedData(NSString *root, NSString *version, NSErro
     return [NSURL fileURLWithPath:path isDirectory:YES];
 }
 
-static BOOL FactorioRestoreGameData(NSUserDefaults *preferences, NSString *root, NSString *bundleRoot,
-    NSString *documentsRoot, NSString *version, FactorioImportProgress progress, NSError **error)
+static BOOL FactorioRestoreGameData(NSString *root, NSString *bundleRoot,
+    NSString *version, FactorioImportProgress progress, NSError **error)
 {
     if (!FactorioRecoverImportedData(root, error)) { return NO; }
     if ([NSFileManager.defaultManager fileExistsAtPath:FactorioImportedDataPath(root)]) {
         return FactorioOpenImportedData(root, version, error) != nil;
     }
-    NSURL *source = nil;
-    NSData *bookmark = [preferences dataForKey:FactorioGameFolderBookmark];
-    if (bookmark) {
-        source = [NSURL URLByResolvingBookmarkData:bookmark options:0 relativeToURL:nil
-            bookmarkDataIsStale:nil error:error];
-        if (!source) { return NO; }
-    } else {
-        NSString *message = nil;
-        NSString *path = FactorioReadDataPath(bundleRoot, documentsRoot, version, &message);
-        if (!path) { if (error) { *error = FactorioGameDataError(message); } return NO; }
-        source = [NSURL fileURLWithPath:path isDirectory:YES];
-    }
+    // Development builds contain game data. Personal IPAs require a fresh import.
+    NSURL *source = [NSURL fileURLWithPath:[bundleRoot stringByAppendingPathComponent:@"FactorioData"] isDirectory:YES];
     return FactorioImportGameData(source, root, version, progress, error);
 }
 
@@ -714,11 +688,6 @@ static void *FactorioOpenFramework(NSString *name, int flags)
     return [NSDictionary dictionaryWithContentsOfFile:path][@"CFBundleShortVersionString"];
 }
 
-+ (NSURL *)documentsFolder
-{
-    return [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
-}
-
 + (NSURL *)startupLogURL
 {
     return FactorioStartupLog;
@@ -778,8 +747,8 @@ static void *FactorioOpenFramework(NSString *name, int flags)
         if (error) { *error = FactorioGameDataError(@"This app template needs your Factorio executable. Use the packaging tool on your computer, then sideload the resulting IPA."); }
         return NO;
     }
-    return FactorioRestoreGameData(NSUserDefaults.standardUserDefaults, FactorioWritableRoot(),
-        NSBundle.mainBundle.bundlePath, [self documentsFolder].path, version, progress, error);
+    return FactorioRestoreGameData(FactorioWritableRoot(), NSBundle.mainBundle.bundlePath,
+        version, progress, error);
 }
 
 + (BOOL)selectGameDataFromURL:(NSURL *)url progress:(FactorioImportProgress)progress error:(NSError **)error
