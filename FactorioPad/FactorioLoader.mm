@@ -573,23 +573,6 @@ static BOOL FactorioRestoreGameData(NSString *root, NSString *bundleRoot,
     return FactorioImportGameData(source, root, version, progress, error);
 }
 
-static BOOL FactorioDisableForcedTextureCompression(NSString *readDataPath, NSError **error)
-{
-    NSString *path = [readDataPath stringByAppendingPathComponent:@"core/prototypes/utility-sprites.lua"];
-    NSString *sprites = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:error];
-    if (!sprites) { return NO; }
-    // The core white_mask forces BC5 even when texture-compression-level is none.
-    NSString *safe = [sprites stringByReplacingOccurrencesOfString:@", \"always-compressed\"" withString:@""];
-    if ([safe containsString:@"\"always-compressed\""]) {
-        if (error) { *error = FactorioGameDataError(@"The game data uses an unsupported forced texture compression flag."); }
-        return NO;
-    }
-    if ([safe isEqualToString:sprites]) { return YES; }
-    if (![safe writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:error]) { return NO; }
-    FactorioLog(@"Removed forced compression from core utility sprites");
-    return YES;
-}
-
 #ifndef FACTORIO_CONFIG_TEST
 static NSString *FactorioPrepareWritableData(NSString *readDataPath)
 {
@@ -642,15 +625,12 @@ static NSString *FactorioPrepareWritableData(NSString *readDataPath)
 
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
     BOOL compressedTextures = device.supportsBCTextureCompression;
+    FactorioLog(@"Sprite mask textures: uncompressed R8/RG8");
     FactorioLog([NSString stringWithFormat:@"GPU: %@; BC texture compression: %@",
         device.name ?: @"unavailable", compressedTextures ? @"supported" : @"unsupported"]);
     if (!compressedTextures) {
         config = FactorioApplyConfigSection(config, @"[graphics]",
             @[@"texture-compression-level=none"], YES, YES);
-        if (!FactorioDisableForcedTextureCompression(readDataPath, &error)) {
-            FactorioReportError(error.localizedDescription);
-            return nil;
-        }
         FactorioLog(@"Disabled texture compression for this GPU");
     }
 

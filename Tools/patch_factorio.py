@@ -88,6 +88,28 @@ def patch_transparent_texture(data: bytearray) -> None:
     struct.pack_into("<I", data, offset + 20 * 4, 0x52800042)  # height 4 -> 2
     print("[patch] Transparent startup texture: BC3 -> BGRA8")
 
+
+# SpriteOption::toBitmapOptions forces BC4 for alpha masks and BC5 for
+# terrain/reflection effect maps, regardless of texture-compression-level.
+# Select R8/RG8 before allocation so Factorio also uses uncompressed uploads,
+# mipmaps and channel layouts. The Metal format mapping itself stays intact.
+SPRITE_MASK_FORMATS = struct.pack("<12I",
+    0x121F054E, 0x710009DF, 0x54000080, 0x3638006A,
+    0xD2C0014D, 0x1400001B, 0xD2C0016D, 0x71002D1F,
+    0x54000300, 0x7100391F, 0x540002C0, 0x373FFE6A)
+
+
+def patch_sprite_mask_formats(data: bytearray) -> None:
+    if data.count(SPRITE_MASK_FORMATS) != 1:
+        raise RuntimeError("Cannot patch the sprite mask formats. Use Mac Factorio 2.0.77.")
+    offset = data.index(SPRITE_MASK_FORMATS)
+    if offset % 4:
+        raise RuntimeError("The sprite mask instructions are not aligned.")
+    struct.pack_into("<I", data, offset + 4 * 4, 0xD2C0006D)  # BitmapFormat 10 (BC4) -> 3 (R8)
+    struct.pack_into("<I", data, offset + 6 * 4, 0xD2C0008D)  # BitmapFormat 11 (BC5) -> 4 (RG8)
+    print("[patch] Sprite masks: BC4/BC5 -> R8/RG8")
+
+
 def patch_ca_bundle_path(data: bytearray) -> None:
     old = b"/etc/ssl/cert.pem"
     new = b"cacert.pem"
@@ -201,6 +223,7 @@ def patch(path):
 
     patch_ca_bundle_path(data)
     patch_transparent_texture(data)
+    patch_sprite_mask_formats(data)
 
     print(
         f"ARM64 Mach-O: "

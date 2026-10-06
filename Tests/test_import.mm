@@ -68,15 +68,11 @@ int main(void)
             isEqual:[files contentsAtPath:[sourcePath stringByAppendingPathComponent:@"base/sound/ambient/main-menu.ogg"]]],
             @"audio and nested files must copy without changing their contents");
         NSCAssert(![files fileExistsAtPath:[destination stringByAppendingPathComponent:@"FactorioPad.log"]], @"do not import old diagnostic logs");
-        NSCAssert(FactorioDisableForcedTextureCompression(destination, &error), @"unsupported GPUs must remove forced sprite compression");
         NSString *spritePath = [destination stringByAppendingPathComponent:@"core/prototypes/utility-sprites.lua"];
         NSString *safe = [NSString stringWithContentsOfFile:spritePath encoding:NSUTF8StringEncoding error:nil];
-        NSCAssert([safe containsString:@"\"alpha-mask\""] && ![safe containsString:@"always-compressed"] &&
-            [safe containsString:@"width = 1, height = 1"], @"the uncompressed mask must retain its alpha flag and dimensions");
-        NSCAssert([[NSString stringWithContentsOfFile:[sourcePath stringByAppendingPathComponent:@"core/prototypes/utility-sprites.lua"]
-            encoding:NSUTF8StringEncoding error:nil] containsString:@"always-compressed"], @"the original game files must stay unchanged");
-        NSCAssert(FactorioDisableForcedTextureCompression(destination, &error) &&
-            [[NSString stringWithContentsOfFile:spritePath encoding:NSUTF8StringEncoding error:nil] isEqualToString:safe], @"the fallback must survive reopening");
+        NSCAssert([[files contentsAtPath:[destination stringByAppendingPathComponent:@"core/prototypes/utility-sprites.lua"]]
+            isEqual:[files contentsAtPath:[sourcePath stringByAppendingPathComponent:@"core/prototypes/utility-sprites.lua"]]],
+            @"import must preserve sprite prototypes because the binary patch handles mask formats");
         [files removeItemAtURL:source error:nil];
         NSCAssert(FactorioRestoreGameData(root, @"/missing", @"2.0.77", ^(double) {
             NSCAssert(NO, @"later launches must not copy the old folder");
@@ -121,7 +117,7 @@ int main(void)
         NSCAssert(FactorioRestoreGameData([temporary stringByAppendingPathComponent:@"DevelopmentDocuments"],
             sourcePath.stringByDeletingLastPathComponent, @"2.0.77", ^(double) {}, &error), @"development builds must import their bundled data");
         [files removeItemAtPath:temporary error:nil];
-        puts("Factorio data import and compression tests passed.");
+        puts("Factorio data import tests passed.");
     }
     return 0;
 }

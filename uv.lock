@@ -13,7 +13,7 @@ wheels = [
 
 [[package]]
 name = "factoriopad-companion"
-version = "2.1"
+version = "2.1.1"
 source = { virtual = "." }
 
 [package.dev-dependencies]
