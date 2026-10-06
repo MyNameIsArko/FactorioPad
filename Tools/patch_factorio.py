@@ -78,8 +78,11 @@ TRANSPARENT_TEXTURE = struct.pack("<22I",
 
 
 def patch_transparent_texture(data: bytearray) -> None:
+    if TRANSPARENT_TEXTURE not in data:
+        print("[warning] Startup texture pattern not found. Skipping this fix for an untested executable.")
+        return
     if data.count(TRANSPARENT_TEXTURE) != 1:
-        raise RuntimeError("Cannot patch the startup texture. Use Mac Factorio 2.0.77.")
+        raise RuntimeError("The startup texture pattern is ambiguous.")
     offset = data.index(TRANSPARENT_TEXTURE)
     if offset % 4:
         raise RuntimeError("The startup texture instructions are not aligned.")
@@ -100,8 +103,11 @@ SPRITE_MASK_FORMATS = struct.pack("<12I",
 
 
 def patch_sprite_mask_formats(data: bytearray) -> None:
+    if SPRITE_MASK_FORMATS not in data:
+        print("[warning] Sprite mask pattern not found. Skipping this fix for an untested executable.")
+        return
     if data.count(SPRITE_MASK_FORMATS) != 1:
-        raise RuntimeError("Cannot patch the sprite mask formats. Use Mac Factorio 2.0.77.")
+        raise RuntimeError("The sprite mask pattern is ambiguous.")
     offset = data.index(SPRITE_MASK_FORMATS)
     if offset % 4:
         raise RuntimeError("The sprite mask instructions are not aligned.")

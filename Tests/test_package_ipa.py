@@ -53,8 +53,15 @@ def rejected(action):
 
 
 def main():
-    # Reject unknown code instead of changing an unrelated instruction sequence.
-    for invalid in (bytearray(), bytearray(TRANSPARENT_TEXTURE * 2), bytearray(b"x" + TRANSPARENT_TEXTURE)):
+    # Missing patterns are optional. Ambiguous or unaligned matches remain unsafe.
+    for patcher in (patch_transparent_texture, patch_sprite_mask_formats):
+        unknown = bytearray(b"different executable instructions")
+        before = bytes(unknown)
+        warning = io.StringIO()
+        with contextlib.redirect_stdout(warning):
+            patcher(unknown)
+        assert unknown == before and "[warning]" in warning.getvalue()
+    for invalid in (bytearray(TRANSPARENT_TEXTURE * 2), bytearray(b"x" + TRANSPARENT_TEXTURE)):
         before = bytes(invalid)
         rejected(lambda: patch_transparent_texture(invalid))
         assert invalid == before
@@ -64,7 +71,7 @@ def main():
     assert instructions[8] == 0x52800028  # BGRA8
     assert instructions[18] == 0x52800041 and instructions[20] == 0x52800042  # 2x2, 16 bytes
     assert sum(a != b for a, b in zip(struct.unpack("<22I", TRANSPARENT_TEXTURE), instructions)) == 3
-    for invalid in (bytearray(), bytearray(SPRITE_MASK_FORMATS * 2), bytearray(b"x" + SPRITE_MASK_FORMATS)):
+    for invalid in (bytearray(SPRITE_MASK_FORMATS * 2), bytearray(b"x" + SPRITE_MASK_FORMATS)):
         before = bytes(invalid)
         rejected(lambda: patch_sprite_mask_formats(invalid))
         assert invalid == before
@@ -170,13 +177,18 @@ def main():
         (contents / "data/base/info.json").write_text('{"version":"9.8.8"}')
         rejected(lambda: package(template, app, root / "failed"))
         assert not (root / "failed").exists()
-        # Arbitrary fixture versions pass packaging and retain their metadata.
-        for version in ("1.2.3", "99.0.0"):
+        # Synthetic executables without known texture patterns still package.
+        unknown = thin.replace(TRANSPARENT_TEXTURE, bytes(len(TRANSPARENT_TEXTURE)))
+        unknown = unknown.replace(SPRITE_MASK_FORMATS, bytes(len(SPRITE_MASK_FORMATS)))
+        (contents / "MacOS/factorio").write_bytes(unknown)
+        for version in ("1.2.3", "99.0.0", "2.0.7", "1.1.110"):
             (contents / "Info.plist").write_bytes(plistlib.dumps({"CFBundleShortVersionString": version}))
             (contents / "data/base/info.json").write_text(json.dumps({"version": version}))
             packaged = root / version
-            with contextlib.redirect_stdout(io.StringIO()):
+            warning = io.StringIO()
+            with contextlib.redirect_stdout(warning):
                 package(template, app, packaged)
+            assert warning.getvalue().count("[warning]") == 2
             with zipfile.ZipFile(packaged / "FactorioPad.ipa") as archive:
                 guest_info = plistlib.loads(archive.read(prefix + "Frameworks/FactorioGuest.framework/Info.plist"))
                 assert guest_info["CFBundleShortVersionString"] == version

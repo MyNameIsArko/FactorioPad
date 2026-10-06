@@ -3,7 +3,8 @@
 Play Factorio on your iPhone or iPad. You need iOS 17 or iPadOS 17 or newer, plus a gamepad or a keyboard and mouse. Touch supports menus, but not touch-only gameplay.
 
 You need your own copy of Factorio. You do not need Xcode or a Mac.
-Tested on Factorio 2.0.77. The companion rejects executable versions that do not match the required startup patch.
+Tested on Factorio 2.0.77. Other versions are allowed but untested.
+The companion skips texture fixes when it cannot find their instruction patterns.
 The executable and game data must use the same version.
 The companion supports Windows x64, Macs with Apple silicon, and Linux x64.
 
