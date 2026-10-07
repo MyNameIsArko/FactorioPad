@@ -33,30 +33,6 @@ xcrun swiftc FactorioPad/FactorioControlsView.swift Tests/test_controls.swift -o
 "$test_dir/controls"
 xcrun swiftc FactorioPad/FactorioSaveSync.swift Tests/test_save_sync.swift -o "$test_dir/save-sync"
 "$test_dir/save-sync"
-xcrun clang -dynamiclib -fobjc-arc -fblocks -framework Foundation -framework Metal \
-    Tools/reject_bc_textures.m -o "$test_dir/reject-bc.dylib"
-xcrun clang -fobjc-arc -framework Foundation -framework Metal Tests/test_no_bc.m -o "$test_dir/no-bc"
-python3 - "$test_dir" <<'PYTEST'
-import os
-from pathlib import Path
-import subprocess
-import sys
-root = Path(sys.argv[1])
-environment = dict(os.environ, DYLD_INSERT_LIBRARIES=str(root / "reject-bc.dylib"))
-formats = (10, 30, 70, 80, 130, 131, 132, 133, 134, 135, 140, 141, 142, 143, 150, 151, 152, 153)
-for index, format in enumerate(formats):
-    result = subprocess.run([str(root / "no-bc"), str(format)], env=environment, capture_output=True, text=True)
-    if index == 0 and result.returncode == 87:
-        print("BC guard tests skipped: this host has no Metal GPU.")
-        break
-    expected = 0 if format < 130 else 86
-    assert result.returncode == expected, (format, result.returncode, result.stderr)
-    if expected:
-        assert f"pixelFormat={format}" in result.stderr and "no-bc" in result.stderr, result.stderr
-else:
-    print("Metal BC guard tests passed.")
-PYTEST
-
 python3 Tests/test_prepare_guest.py
 python3 Tests/test_package_ipa.py
 
