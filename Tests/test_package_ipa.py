@@ -16,7 +16,7 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Tools"))
 from package_ipa import MARKER, app_prefix, arm64_slice, make_template, package, package_dmg, remove_signature
-from patch_factorio import CPU_TYPE_ARM64, MH_MAGIC_64, MH_DYLIB, LC_ID_DYLIB, TRANSPARENT_TEXTURE, patch_transparent_texture, SPRITE_MASK_FORMATS, patch_sprite_mask_formats
+from patch_factorio import CPU_TYPE_ARM64, MH_MAGIC_64, MH_DYLIB, LC_ID_DYLIB, TRANSPARENT_TEXTURE, patch_transparent_texture, SPRITE_MASK_FORMATS, patch_sprite_mask_formats, TERRAIN_EFFECT_FORMAT, patch_terrain_effect_format
 
 
 def executable():
@@ -33,6 +33,7 @@ def executable():
     data[1024:1041] = b"/etc/ssl/cert.pem\0"
     data[1088:1088 + len(TRANSPARENT_TEXTURE)] = TRANSPARENT_TEXTURE
     data[1216:1216 + len(SPRITE_MASK_FORMATS)] = SPRITE_MASK_FORMATS
+    data[1344:1344 + len(TERRAIN_EFFECT_FORMAT)] = TERRAIN_EFFECT_FORMAT
     return bytes(data)
 
 
@@ -54,7 +55,7 @@ def rejected(action):
 
 def main():
     # Missing patterns are optional. Ambiguous or unaligned matches remain unsafe.
-    for patcher in (patch_transparent_texture, patch_sprite_mask_formats):
+    for patcher in (patch_transparent_texture, patch_sprite_mask_formats, patch_terrain_effect_format):
         unknown = bytearray(b"different executable instructions")
         before = bytes(unknown)
         warning = io.StringIO()
@@ -81,8 +82,17 @@ def main():
     instructions = struct.unpack("<12I", masks)
     # MOVZ x13 stores the BitmapFormat in the upper word of BitmapOptions.
     assert instructions[4] == 0xD2C0006D  # R8, Metal format 10
-    assert instructions[6] == 0xD2C0008D  # RG8, Metal format 30
+    assert instructions[6] == 0xD280000D  # RGBA8, Metal format 70
     assert all(a == b for i, (a, b) in enumerate(zip(original, instructions)) if i not in (4, 6))
+    for invalid in (bytearray(TERRAIN_EFFECT_FORMAT * 2), bytearray(b"x" + TERRAIN_EFFECT_FORMAT)):
+        before = bytes(invalid)
+        rejected(lambda: patch_terrain_effect_format(invalid))
+        assert invalid == before
+    terrain = bytearray(TERRAIN_EFFECT_FORMAT)
+    patch_terrain_effect_format(terrain)
+    terrain_instructions = struct.unpack("<9I", terrain)
+    assert terrain_instructions[2] == 0xD280000D  # RGBA8, Metal format 70
+    assert sum(a != b for a, b in zip(struct.unpack("<9I", TERRAIN_EFFECT_FORMAT), terrain_instructions)) == 1
     fixture_version = "9.8.7"
     thin = executable()
     for magic, format in [(0xCAFEBABE, ">IIIII"), (0xCAFEBABF, ">IIQQII")]:
@@ -148,6 +158,7 @@ def main():
             assert struct.unpack_from("<I", binary, 12)[0] == MH_DYLIB
             assert struct.unpack_from("<12I", binary, 1216) == instructions
             assert SPRITE_MASK_FORMATS not in binary
+            assert struct.unpack_from("<9I", binary, 1344) == terrain_instructions
             assert LC_ID_DYLIB in commands(binary) and 0x1D not in commands(binary)
             assert b"cacert.pem\0" in binary and b"/etc/ssl/cert.pem" not in binary
             assert archive.getinfo(prefix + "Frameworks/FactorioGuest.framework/FactorioGuest").external_attr >> 16 & 0o111

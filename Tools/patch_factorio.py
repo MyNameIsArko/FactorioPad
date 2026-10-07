@@ -94,7 +94,7 @@ def patch_transparent_texture(data: bytearray) -> None:
 
 # SpriteOption::toBitmapOptions forces BC4 for alpha masks and BC5 for
 # terrain/reflection effect maps, regardless of texture-compression-level.
-# Select R8/RG8 before allocation so Factorio also uses uncompressed uploads,
+# Select R8/RGBA8 before allocation so Factorio also uses uncompressed uploads,
 # mipmaps and channel layouts. The Metal format mapping itself stays intact.
 SPRITE_MASK_FORMATS = struct.pack("<12I",
     0x121F054E, 0x710009DF, 0x54000080, 0x3638006A,
@@ -112,8 +112,27 @@ def patch_sprite_mask_formats(data: bytearray) -> None:
     if offset % 4:
         raise RuntimeError("The sprite mask instructions are not aligned.")
     struct.pack_into("<I", data, offset + 4 * 4, 0xD2C0006D)  # BitmapFormat 10 (BC4) -> 3 (R8)
-    struct.pack_into("<I", data, offset + 6 * 4, 0xD2C0008D)  # BitmapFormat 11 (BC5) -> 4 (RG8)
-    print("[patch] Sprite masks: BC4/BC5 -> R8/RG8")
+    struct.pack_into("<I", data, offset + 6 * 4, 0xD280000D)  # BitmapFormat 11 (BC5) -> 0 (RGBA8); RG8 uploads are unsupported
+    print("[patch] Sprite masks: BC4/BC5 -> R8/RGBA8")
+
+
+# SpriteGroup::TerrainEffectMap also forces BC1 with compression disabled.
+TERRAIN_EFFECT_FORMAT = struct.pack("<9I",
+    0xD280000D, 0x14000002, 0xD2C0010D, 0x121B0148, 0x2A0C0108,
+    0x7100011F, 0x1A9F07E8, 0x7100017F, 0x1A9F0529)
+
+
+def patch_terrain_effect_format(data: bytearray) -> None:
+    if TERRAIN_EFFECT_FORMAT not in data:
+        print("[warning] Terrain effect pattern not found. Skipping this fix for an untested executable.")
+        return
+    if data.count(TERRAIN_EFFECT_FORMAT) != 1:
+        raise RuntimeError("The terrain effect pattern is ambiguous.")
+    offset = data.index(TERRAIN_EFFECT_FORMAT)
+    if offset % 4:
+        raise RuntimeError("The terrain effect instructions are not aligned.")
+    struct.pack_into("<I", data, offset + 2 * 4, 0xD280000D)  # BitmapFormat 8 (BC1) -> 0 (RGBA8)
+    print("[patch] Terrain effect textures: BC1 -> RGBA8")
 
 
 def patch_ca_bundle_path(data: bytearray) -> None:
@@ -230,6 +249,7 @@ def patch(path):
     patch_ca_bundle_path(data)
     patch_transparent_texture(data)
     patch_sprite_mask_formats(data)
+    patch_terrain_effect_format(data)
 
     print(
         f"ARM64 Mach-O: "

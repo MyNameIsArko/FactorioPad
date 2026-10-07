@@ -44,20 +44,26 @@ int main(void)
         NSCAssert([FactorioUpdateConfigPaths(customGraphics, @"/new/read", @"/new/write") hasPrefix:customGraphics],
             @"saved graphics preferences must not be replaced by new defaults");
         for (NSString *graphics in @[
-            @"[graphics]\ntexture-compression-level=high-quality\n[interface]\ncustom-ui-scale=1.25\n",
+            @"[graphics]\ntexture-compression-level=high-quality\ngpu-accelerated-compression=true\ngpu-accelerated-mipmap-compression=true\n[interface]\ncustom-ui-scale=1.25\n",
             @"[graphics]\n texture-compression-level = high-quality \nhigh-quality-animations=false\n[interface]\ncustom-ui-scale=1.25\n",
             @"[graphics]\nhigh-quality-animations=false\n[interface]\ncustom-ui-scale=1.25\n",
             @"[interface]\ncustom-ui-scale=1.25\n"
         ]) {
             NSString *safe = FactorioApplyConfigSection(graphics, @"[graphics]",
-                @[@"texture-compression-level=none"], YES, YES);
+                @[@"texture-compression-level=none", @"gpu-accelerated-compression=false",
+                  @"gpu-accelerated-mipmap-compression=false"], YES, YES);
             NSCAssert([safe containsString:@"texture-compression-level=none"] &&
+                [safe containsString:@"gpu-accelerated-compression=false"] &&
+                [safe containsString:@"gpu-accelerated-mipmap-compression=false"] &&
                 ![safe containsString:@"texture-compression-level=high-quality"] &&
-                ![safe containsString:@"texture-compression-level = high-quality"],
+                ![safe containsString:@"texture-compression-level = high-quality"] &&
+                ![safe containsString:@"gpu-accelerated-compression=true"] &&
+                ![safe containsString:@"gpu-accelerated-mipmap-compression=true"],
                 @"unsupported GPUs must disable compression in existing and new configurations");
             NSCAssert([safe containsString:@"custom-ui-scale=1.25"], @"the GPU fallback must preserve unrelated preferences");
             NSCAssert([FactorioApplyConfigSection(safe, @"[graphics]",
-                @[@"texture-compression-level=none"], YES, YES) isEqualToString:safe], @"the fallback must survive repeated launches");
+                @[@"texture-compression-level=none", @"gpu-accelerated-compression=false",
+                  @"gpu-accelerated-mipmap-compression=false"], YES, YES) isEqualToString:safe], @"the fallback must survive repeated launches");
         }
         NSArray<NSString *> *examples = @[
             @"[path]\nread-data=/old\nwrite-data=/old-write\n[graphics]\nquality=high\n",
