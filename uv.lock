@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 
 [[package]]
@@ -13,7 +13,7 @@ wheels = [
 
 [[package]]
 name = "factoriopad-companion"
-version = "2.1.1"
+version = "2.1.2"
 source = { virtual = "." }
 
 [package.dev-dependencies]

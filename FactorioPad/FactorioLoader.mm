@@ -625,12 +625,13 @@ static NSString *FactorioPrepareWritableData(NSString *readDataPath)
 
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
     BOOL compressedTextures = device.supportsBCTextureCompression;
-    FactorioLog(@"Sprite mask textures: uncompressed R8/RG8");
+    FactorioLog(@"Sprite mask textures: uncompressed R8/RGBA8");
     FactorioLog([NSString stringWithFormat:@"GPU: %@; BC texture compression: %@",
         device.name ?: @"unavailable", compressedTextures ? @"supported" : @"unsupported"]);
     if (!compressedTextures) {
         config = FactorioApplyConfigSection(config, @"[graphics]",
-            @[@"texture-compression-level=none"], YES, YES);
+            @[@"texture-compression-level=none", @"gpu-accelerated-compression=false",
+              @"gpu-accelerated-mipmap-compression=false"], YES, YES);
         FactorioLog(@"Disabled texture compression for this GPU");
     }
 
