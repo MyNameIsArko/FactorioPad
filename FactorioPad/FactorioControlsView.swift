@@ -6,16 +6,19 @@ struct FactorioControllerModePicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Controller input").font(.headline)
-            Picker("Controller input", selection: $nativeController) {
-                Text("FactorioPad controls").tag(false)
-                Text("Factorio native controls").tag(true)
+            HStack {
+                Text("Controls").font(.headline)
+                Spacer()
+                Picker("Controls", selection: $nativeController) {
+                    Text("Mouse and keyboard emulation").tag(false)
+                    Text("Factorio native controls").tag(true)
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .focusable(false)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .focusable(false)
             if let active = activeNativeController {
-                Text("This launch: \(active ? "Factorio native controls" : "FactorioPad controls")")
+                Text("This launch: \(active ? "Factorio native controls" : "Mouse and keyboard emulation")")
                     .foregroundStyle(.secondary)
                 if nativeController != active {
                     Text("Save your game, then close and reopen the app to apply this change.")

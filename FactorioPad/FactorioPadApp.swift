@@ -50,6 +50,7 @@ extension Notification.Name {
 struct FactorioLaunchView: View {
     private enum Stage { case gameSetup, openingGame, setup, syncing, playing, stopped }
 
+    @AppStorage("FactorioLowGraphics") private var lowGraphics = false
     @State private var stage = Stage.openingGame
     @State private var importProgress = 0.0
     @State private var showsControls = false
@@ -79,50 +80,67 @@ struct FactorioLaunchView: View {
                         }
                     }
             } else {
-                VStack(spacing: 20) {
-                    Text("FactorioPad").font(.largeTitle.bold())
-                    if stage == .gameSetup {
-                        Text("Import your FactorioData folder. You only need to do this once.")
-                            .multilineTextAlignment(.center)
-                        if let status { Text(status).foregroundStyle(.secondary) }
-                        Button("Import game data") {
-                            selectsGameFolder = true
-                            showsFolderPicker = true
-                        }
-                        .buttonStyle(.borderedProminent)
-                    } else if stage == .openingGame {
-                        ProgressView("Importing game data…", value: importProgress)
-                        Text(importProgress, format: .percent.precision(.fractionLength(0)))
-                            .foregroundStyle(.secondary)
-                    } else if stage == .syncing {
-                        ProgressView("Syncing saves…")
-                    } else if stage == .stopped {
-                        Text(status ?? "Factorio stopped.")
-                            .multilineTextAlignment(.center)
-                        FactorioControllerModePicker(activeNativeController: FactorioLoader.usesNativeController)
-                        if FactorioSaveSync.hasFolder {
-                            Button("Retry save sync") { Task { await syncAfterPlay() } }
-                                .buttonStyle(.borderedProminent)
-                        }
-                        Button("Choose save folder") { selectsGameFolder = false; showsFolderPicker = true }
-                    } else {
-                        FactorioControllerModePicker()
-                        Text("Choose a folder in iCloud Drive to share saves with Factorio on your computer.")
-                            .multilineTextAlignment(.center)
-                        if let status { Text(status).foregroundStyle(.secondary) }
-                        Button("Choose save folder") { selectsGameFolder = false; showsFolderPicker = true }
+                ScrollView {
+                    VStack(spacing: 20) {
+                        Text("FactorioPad").font(.largeTitle.bold())
+                        if stage == .gameSetup {
+                            Text("Import your FactorioData folder. You only need to do this once.")
+                                .multilineTextAlignment(.center)
+                            if let status { Text(status).foregroundStyle(.secondary) }
+                            Button("Import game data") {
+                                selectsGameFolder = true
+                                showsFolderPicker = true
+                            }
                             .buttonStyle(.borderedProminent)
-                        if FactorioSaveSync.hasFolder {
-                            Button("Play") { Task { await syncBeforePlay() } }
+                        } else if stage == .openingGame {
+                            ProgressView("Importing game data…", value: importProgress)
+                            Text(importProgress, format: .percent.precision(.fractionLength(0)))
+                                .foregroundStyle(.secondary)
+                        } else if stage == .syncing {
+                            ProgressView("Syncing saves…")
+                        } else if stage == .stopped {
+                            Text(status ?? "Factorio stopped.")
+                                .multilineTextAlignment(.center)
+                            FactorioControllerModePicker(activeNativeController: FactorioLoader.usesNativeController)
+                            if FactorioSaveSync.hasFolder {
+                                Button("Retry save sync") { Task { await syncAfterPlay() } }
+                                    .buttonStyle(.borderedProminent)
+                            }
+                            Button("Choose save folder") { selectsGameFolder = false; showsFolderPicker = true }
                         } else {
-                            Button("Play without sync") { stage = .playing }
+                            FactorioControllerModePicker()
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Text("Graphics").font(.headline)
+                                    Spacer()
+                                    Picker("Graphics", selection: $lowGraphics) {
+                                        Text("High").tag(false)
+                                        Text("Low (less memory)").tag(true)
+                                    }
+                                    .pickerStyle(.menu)
+                                    .labelsHidden()
+                                    .focusable(false)
+                                }
+                                Text("Low reduces texture detail and disables high-quality animations and shadows.")
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text("Choose a folder in iCloud Drive to share saves with Factorio on your computer.")
+                                .multilineTextAlignment(.center)
+                            if let status { Text(status).foregroundStyle(.secondary) }
+                            Button("Choose save folder") { selectsGameFolder = false; showsFolderPicker = true }
+                                .buttonStyle(.borderedProminent)
+                            if FactorioSaveSync.hasFolder {
+                                Button("Play") { Task { await syncBeforePlay() } }
+                            } else {
+                                Button("Play without sync") { stage = .playing }
+                            }
+                        }
+                        if let log = FactorioLoader.startupLogURL() {
+                            ShareLink("Share log", item: log)
                         }
                     }
-                    if let log = FactorioLoader.startupLogURL() {
-                        ShareLink("Share log", item: log)
-                    }
+                    .padding(32)
                 }
-                .padding(32)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(white: 0.06))
                 .preferredColorScheme(.dark)
@@ -155,7 +173,7 @@ struct FactorioLaunchView: View {
                 }
                 try FactorioSaveSync.saveFolder(folder)
                 if stage == .setup {
-                    Task { await syncBeforePlay() }
+                    status = nil
                 } else if stage == .stopped {
                     Task { await syncAfterPlay() }
                 }
@@ -191,7 +209,6 @@ struct FactorioLaunchView: View {
             }.value
             status = nil
             stage = .setup
-            if folder != nil && FactorioSaveSync.hasFolder { await syncBeforePlay() }
         } catch {
             FactorioLoader.logMessage(error.localizedDescription)
             status = error.localizedDescription

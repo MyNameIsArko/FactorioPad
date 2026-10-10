@@ -377,6 +377,15 @@ static NSString *FactorioConfigureInput(NSString *config, BOOL nativeController)
         @[nativeController ? @"input-method=game-controller" : @"input-method=keyboard-and-mouse"], YES, YES);
 }
 
+static NSString *FactorioConfigureGraphics(NSString *config, BOOL lowGraphics)
+{
+    return FactorioApplyConfigSection(config, @"[graphics]", @[
+        lowGraphics ? @"graphics-quality=medium" : @"graphics-quality=high",
+        lowGraphics ? @"high-quality-animations=false" : @"high-quality-animations=true",
+        lowGraphics ? @"high-quality-shadows=false" : @"high-quality-shadows=true"
+    ], YES, YES);
+}
+
 static NSArray<NSString *> *FactorioStartupArguments(
     NSString *configPath, NSString *modsPath, CGSize windowSize, BOOL nativeController)
 {
@@ -645,6 +654,9 @@ static NSString *FactorioPrepareWritableData(NSString *readDataPath)
     }
 
     config = FactorioConfigureInput(config, FactorioNativeController);
+    BOOL lowGraphics = [NSUserDefaults.standardUserDefaults boolForKey:@"FactorioLowGraphics"];
+    config = FactorioConfigureGraphics(config, lowGraphics);
+    FactorioLog(lowGraphics ? @"Graphics: low (less memory)" : @"Graphics: high");
 
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
     BOOL compressedTextures = device.supportsBCTextureCompression;
@@ -775,7 +787,7 @@ static void *FactorioOpenFramework(NSString *name, int flags)
 {
     FactorioLog(@"Starting the game loader");
     FactorioNativeController = [NSUserDefaults.standardUserDefaults boolForKey:@"FactorioNativeController"];
-    FactorioLog(FactorioNativeController ? @"Controller input: Factorio native" : @"Controller input: FactorioPad");
+    FactorioLog(FactorioNativeController ? @"Controller input: Factorio native" : @"Controller input: mouse and keyboard emulation");
     FactorioConfigureEnvironment(FactorioNativeController);
 
     NSString *guestVersion = [self guestVersion];
@@ -816,7 +828,7 @@ static void *FactorioOpenFramework(NSString *name, int flags)
     FactorioLog(@"Preparing input");
     if (!FactorioKeyboardBridgeSetGuestHandle(guest, FactorioNativeController)) {
         FactorioReportError(FactorioNativeController
-            ? @"This Factorio game file does not support native controller input. Select FactorioPad controls and reopen the app."
+            ? @"This Factorio game file does not support native controller input. Select Mouse and keyboard emulation and reopen the app."
             : @"This Factorio game file does not provide compatible input functions.");
         return;
     }
