@@ -61,6 +61,7 @@ static dispatch_source_t
 
 
 static BOOL gActive = YES;
+static BOOL gEmulateController = YES;
 static GCController *gCurrentController = nil;
 
 static CGFloat gWidth = 1133.0;
@@ -528,7 +529,7 @@ FPInstallController(
     GCExtendedGamepad *pad =
         controller.extendedGamepad;
 
-    if (!pad || gCurrentController) {
+    if (!gEmulateController || !pad || gCurrentController) {
         return;
     }
     gCurrentController = controller;
@@ -828,7 +829,7 @@ FPInstallController(
 
 
 void
-FactorioControllerBridgeStart(void)
+FactorioControllerBridgeStart(BOOL emulateController)
 {
     static dispatch_once_t onceToken;
 
@@ -836,6 +837,7 @@ FactorioControllerBridgeStart(void)
         &onceToken,
         ^{
 
+        gEmulateController = emulateController;
         gControllerQueue =
             dispatch_queue_create(
                 "FactorioPad.ControllerBridge",

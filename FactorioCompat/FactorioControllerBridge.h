@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-void FactorioControllerBridgeStart(void);
+void FactorioControllerBridgeStart(BOOL emulateController);
 
 void FactorioControllerBridgeSetActive(
     BOOL active

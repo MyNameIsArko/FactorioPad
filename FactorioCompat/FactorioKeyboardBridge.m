@@ -182,6 +182,17 @@ static FPSDLSendKeyboardKeyFn
 static FPSDLSetModStateFn
     gSetModState = NULL;
 
+static void (*gSetKeyboardFocus)(void *window);
+static void *(*gGetWindowFromID)(uint32_t windowID);
+static void (*gLockJoysticks)(void);
+static void (*gUnlockJoysticks)(void);
+static int (*gNumJoysticks)(void);
+static int32_t (*gJoystickGetDeviceInstanceID)(int index);
+static void *(*gJoystickFromInstanceID)(int32_t instanceID);
+static void (*gRecenterJoystick)(void *joystick);
+static int (*gSetHintWithPriority)(const char *name, const char *value, int priority);
+static uint32_t gSuspendedWindowID;
+
 static FPUint16
     gSyntheticModifiers = 0;
 
@@ -289,7 +300,8 @@ FPPushUTF8Chunk(
 
 BOOL
 FactorioKeyboardBridgeSetGuestHandle(
-    void *handle
+    void *handle,
+    BOOL nativeController
 )
 {
     @synchronized (FPInputLock()) {
@@ -334,19 +346,64 @@ FactorioKeyboardBridgeSetGuestHandle(
                 handle,
                 "SDL_SetModState"
             ) : NULL);
-        BOOL ready = gPushEvent && gGetKeyboardFocus && gGetWindowID && gGetTicks && gSendKeyboardKey && gSetModState;
+        void *nativeHandle = nativeController ? handle : NULL;
+        gSetKeyboardFocus = nativeHandle ? dlsym(nativeHandle, "SDL_SetKeyboardFocus") : NULL;
+        gGetWindowFromID = nativeHandle ? dlsym(nativeHandle, "SDL_GetWindowFromID") : NULL;
+        gLockJoysticks = nativeHandle ? dlsym(nativeHandle, "SDL_LockJoysticks") : NULL;
+        gUnlockJoysticks = nativeHandle ? dlsym(nativeHandle, "SDL_UnlockJoysticks") : NULL;
+        gNumJoysticks = nativeHandle ? dlsym(nativeHandle, "SDL_NumJoysticks") : NULL;
+        gJoystickGetDeviceInstanceID = nativeHandle ? dlsym(nativeHandle, "SDL_JoystickGetDeviceInstanceID") : NULL;
+        gJoystickFromInstanceID = nativeHandle ? dlsym(nativeHandle, "SDL_JoystickFromInstanceID") : NULL;
+        gRecenterJoystick = nativeHandle ? dlsym(nativeHandle, "SDL_PrivateJoystickForceRecentering") : NULL;
+        gSetHintWithPriority = nativeHandle ? dlsym(nativeHandle, "SDL_SetHintWithPriority") : NULL;
+        BOOL nativeReady = gSetKeyboardFocus && gGetWindowFromID && gLockJoysticks && gUnlockJoysticks &&
+            gNumJoysticks && gJoystickGetDeviceInstanceID && gJoystickFromInstanceID && gRecenterJoystick && gSetHintWithPriority;
+        BOOL ready = gPushEvent && gGetKeyboardFocus && gGetWindowID && gGetTicks && gSendKeyboardKey && gSetModState &&
+            (!nativeController || nativeReady);
+        if (ready && nativeController) {
+            // Focus loss must block native input even if Factorio requests background events.
+            ready = gSetHintWithPriority("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "0", 2) != 0;
+        }
         if (!ready) {
             // Do not leave a partially initialized bridge available to other input sources.
             gPushEvent = NULL;
             gSendKeyboardKey = NULL;
             gSetModState = NULL;
+            gSetKeyboardFocus = NULL;
             if (handle) NSLog(@"[FactorioPad] The guest is missing required SDL input functions.");
         }
+        gSuspendedWindowID = 0;
         gSyntheticModifiers = 0;
         gPhysicalModifiers = 0;
         gSyntheticMouseButtons = 0;
         memset(gKeySources, 0, sizeof(gKeySources));
         return ready;
+    }
+}
+
+void FactorioInputSetActive(BOOL active)
+{
+    @synchronized (FPInputLock()) {
+        if (!gSetKeyboardFocus || (active && !gSuspendedWindowID)) return;
+        gLockJoysticks();
+        if (!active) {
+            void *window = gGetKeyboardFocus();
+            if (window) {
+                gSuspendedWindowID = gGetWindowID(window);
+                gSetKeyboardFocus(NULL);
+                // Focus loss blocks new presses; recentering also releases controls already held.
+                int count = gNumJoysticks();
+                for (int index = 0; index < count; index++) {
+                    void *joystick = gJoystickFromInstanceID(gJoystickGetDeviceInstanceID(index));
+                    if (joystick) gRecenterJoystick(joystick);
+                }
+            }
+        } else {
+            void *window = gGetWindowFromID(gSuspendedWindowID);
+            gSuspendedWindowID = 0;
+            if (window && !gGetKeyboardFocus()) gSetKeyboardFocus(window);
+        }
+        gUnlockJoysticks();
     }
 }
 

@@ -37,6 +37,12 @@ int main(void)
     @autoreleasepool {
         gControllerQueue = dispatch_queue_create("FactorioPad.ControllerTest", DISPATCH_QUEUE_SERIAL);
         GCController *controller = [GCController controllerWithExtendedGamepad];
+        gEmulateController = NO;
+        FPInstallController(controller);
+        NSCAssert(!gCurrentController && !controller.extendedGamepad.buttonA.pressedChangedHandler &&
+            !controller.extendedGamepad.leftThumbstick.valueChangedHandler,
+            @"native mode must leave the controller to SDL");
+        gEmulateController = YES;
         FPInstallController(controller);
         GCExtendedGamepad *pad = controller.extendedGamepad;
         dispatch_sync(gControllerQueue, ^{

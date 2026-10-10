@@ -6,7 +6,9 @@ NS_ASSUME_NONNULL_BEGIN
 FOUNDATION_EXPORT void FactorioInputPerform(dispatch_block_t operation);
 
 FOUNDATION_EXPORT BOOL
-FactorioKeyboardBridgeSetGuestHandle(void *handle);
+FactorioKeyboardBridgeSetGuestHandle(void *handle, BOOL nativeController);
+
+FOUNDATION_EXPORT void FactorioInputSetActive(BOOL active);
 
 FOUNDATION_EXPORT void
 FactorioKeyboardInsertText(NSString *text);
