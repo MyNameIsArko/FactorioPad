@@ -1,9 +1,39 @@
 import SwiftUI
 
+struct FactorioControllerModePicker: View {
+    var activeNativeController: Bool? = nil
+    @AppStorage("FactorioNativeController") private var nativeController = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Controller input").font(.headline)
+            Picker("Controller input", selection: $nativeController) {
+                Text("FactorioPad controls").tag(false)
+                Text("Factorio native controls").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .focusable(false)
+            if let active = activeNativeController {
+                Text("This launch: \(active ? "Factorio native controls" : "FactorioPad controls")")
+                    .foregroundStyle(.secondary)
+                if nativeController != active {
+                    Text("Save your game, then close and reopen the app to apply this change.")
+                        .foregroundStyle(.orange)
+                }
+            } else {
+                Text("Your choice applies when the game starts.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
 struct FactorioControlsView: View {
     var onClose: () -> Void
     var onSaves: () -> Void
     var logURL: URL? = nil
+    var nativeControllerActive = false
 
     typealias Activity = (title: String, icon: String, controls: [(action: String, buttons: String)])
     static let activities: [Activity] = [
@@ -86,24 +116,34 @@ struct FactorioControlsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    FactorioControllerModePicker(activeNativeController: nativeControllerActive)
                     if let log = logURL {
                         ShareLink("Share log", item: log)
                             .buttonStyle(.bordered)
                             .focusable(false)
                     }
-                    Text("Hold LB (Shift) or RB (Ctrl) before the other button. In an inventory, point at the stack you want to transfer.")
-                        .foregroundStyle(.secondary)
-                    Text("To change a quickbar assignment, point at the slot and press RB + D-pad ↑ to clear it. With an empty hand, press RT on the empty slot and choose a replacement item. Release LT before clearing a slot.")
-                        .foregroundStyle(.secondary)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 380), alignment: .top)],
-                        alignment: .leading, spacing: 16) {
-                        ForEach(Self.activities.indices, id: \.self) { index in
-                            activityCard(Self.activities[index])
+                    if nativeControllerActive {
+                        Text("Factorio handles your controller directly, with analog movement and its controller interface.")
+                            .foregroundStyle(.secondary)
+                        Text("Connect a controller before starting the game. Open Settings → Controls in Factorio to select controller input or change its bindings.")
+                            .foregroundStyle(.secondary)
+                        Text("Tap the keyboard button to type. Touch, physical keyboard, and mouse input remain available.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Hold LB (Shift) or RB (Ctrl) before the other button. In an inventory, point at the stack you want to transfer.")
+                            .foregroundStyle(.secondary)
+                        Text("To change a quickbar assignment, point at the slot and press RB + D-pad ↑ to clear it. With an empty hand, press RT on the empty slot and choose a replacement item. Release LT before clearing a slot.")
+                            .foregroundStyle(.secondary)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 380), alignment: .top)],
+                            alignment: .leading, spacing: 16) {
+                            ForEach(Self.activities.indices, id: \.self) { index in
+                                activityCard(Self.activities[index])
+                            }
                         }
+                        Text("Xbox-style positions: A is bottom, B is right, X is left, and Y is top. View is also called Options; Menu is also called Start. These are the default FactorioPad bindings. Custom bindings in Factorio can change them.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
-                    Text("Xbox-style positions: A is bottom, B is right, X is left, and Y is top. View is also called Options; Menu is also called Start. These are the default FactorioPad bindings. Custom bindings in Factorio can change them.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)

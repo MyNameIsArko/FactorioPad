@@ -27,13 +27,17 @@ Keep your generated IPA private because it contains your Factorio executable.
 
 ## What changes on iPhone and iPad
 
-- A gamepad uses mouse and keyboard controls. The right stick moves the pointer.
+- A gamepad uses `FactorioPad controls` by default. Select `Factorio native controls` for analog movement and Factorio's controller interface.
 - Physical keyboards and mice support typing, clicks, dragging, and scrolling.
 - Touch supports menu taps and drags.
 - New installations use a 150% interface scale and one visible quickbar.
 - New freeplay games skip the opening cutscene and tutorial prompt.
 - Tap the keyboard button to type. Hold it to see the gamepad controls.
 - Full-screen play keeps a connected mouse pointer inside the game.
+
+To change the controller mode, hold the keyboard button and select a mode under `Controller input`.
+Save your game, then close and reopen the app to apply the change.
+You can also select a mode on the setup screen before you start the game.
 
 ## Share saves through iCloud
 

@@ -19,6 +19,7 @@
 #include <unistd.h>
 
 static NSURL *FactorioStartupLog;
+static BOOL FactorioNativeController;
 static NSURL *FactorioSharedLogFolder;
 static BOOL FactorioSharedLogAccess;
 static dispatch_queue_t FactorioLogQueue;
@@ -145,9 +146,9 @@ static void FactorioReportError(NSString *message)
     });
 }
 
-static void FactorioConfigureEnvironment(void)
+static void FactorioConfigureEnvironment(BOOL nativeController)
 {
-    setenv("SDL_JOYSTICK_MFI", "1", 1);
+    setenv("SDL_JOYSTICK_MFI", nativeController ? "1" : "0", 1);
     setenv("SDL_JOYSTICK_IOKIT", "0", 1);
     setenv("SDL_JOYSTICK_HIDAPI", "0", 1);
 }
@@ -368,6 +369,26 @@ static NSString *FactorioApplyConfigSection(
         [result addObjectsFromArray:bindings];
     }
     return [result componentsJoinedByString:@"\n"];
+}
+
+static NSString *FactorioConfigureInput(NSString *config, BOOL nativeController)
+{
+    return FactorioApplyConfigSection(config, @"[input]",
+        @[nativeController ? @"input-method=game-controller" : @"input-method=keyboard-and-mouse"], YES, YES);
+}
+
+static NSArray<NSString *> *FactorioStartupArguments(
+    NSString *configPath, NSString *modsPath, CGSize windowSize, BOOL nativeController)
+{
+    NSString *windowSizeArgument = [NSString stringWithFormat:@"%ldx%ld",
+        lround(MAX(windowSize.width, 1.0)), lround(MAX(windowSize.height, 1.0))];
+    NSMutableArray<NSString *> *arguments = [@[
+        @"factorio", @"--config", configPath, @"--mod-directory", modsPath,
+        @"--no-log-rotation", @"--force-metal", @"--fullscreen=false",
+        @"--window-size", windowSizeArgument, @"--single-thread-loading"
+    ] mutableCopy];
+    if (!nativeController) [arguments addObject:@"--nogamepad"];
+    return arguments;
 }
 
 #if DEBUG
@@ -623,6 +644,8 @@ static NSString *FactorioPrepareWritableData(NSString *readDataPath)
             FactorioControllerBindings(), NO);
     }
 
+    config = FactorioConfigureInput(config, FactorioNativeController);
+
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
     BOOL compressedTextures = device.supportsBCTextureCompression;
     FactorioLog(@"Sprite mask textures: uncompressed R8/RGBA8");
@@ -751,7 +774,9 @@ static void *FactorioOpenFramework(NSString *name, int flags)
 + (void)startWithWindowSize:(CGSize)windowSize
 {
     FactorioLog(@"Starting the game loader");
-    FactorioConfigureEnvironment();
+    FactorioNativeController = [NSUserDefaults.standardUserDefaults boolForKey:@"FactorioNativeController"];
+    FactorioLog(FactorioNativeController ? @"Controller input: Factorio native" : @"Controller input: FactorioPad");
+    FactorioConfigureEnvironment(FactorioNativeController);
 
     NSString *guestVersion = [self guestVersion];
     if (!guestVersion.length) {
@@ -789,11 +814,13 @@ static void *FactorioOpenFramework(NSString *name, int flags)
     }
 
     FactorioLog(@"Preparing input");
-    if (!FactorioKeyboardBridgeSetGuestHandle(guest)) {
-        FactorioReportError(@"This Factorio game file does not provide compatible input functions.");
+    if (!FactorioKeyboardBridgeSetGuestHandle(guest, FactorioNativeController)) {
+        FactorioReportError(FactorioNativeController
+            ? @"This Factorio game file does not support native controller input. Select FactorioPad controls and reopen the app."
+            : @"This Factorio game file does not provide compatible input functions.");
         return;
     }
-    FactorioControllerBridgeStart();
+    FactorioControllerBridgeStart(!FactorioNativeController);
     FactorioControllerBridgeSetViewportSize(windowSize.width, windowSize.height);
 
     typedef int (*FactorioMainFunction)(int, char **);
@@ -805,22 +832,7 @@ static void *FactorioOpenFramework(NSString *name, int flags)
         return;
     }
 
-    CGFloat width = MAX(windowSize.width, 1.0);
-    CGFloat height = MAX(windowSize.height, 1.0);
-    NSString *windowSizeArgument = [NSString stringWithFormat:@"%ldx%ld",
-        lround(width), lround(height)];
-
-    NSArray<NSString *> *arguments = @[
-        @"factorio",
-        @"--config", configPath,
-        @"--mod-directory", modsPath,
-        @"--no-log-rotation",
-        @"--force-metal",
-        @"--fullscreen=false",
-        @"--window-size", windowSizeArgument,
-        @"--nogamepad",
-        @"--single-thread-loading"
-    ];
+    NSArray<NSString *> *arguments = FactorioStartupArguments(configPath, modsPath, windowSize, FactorioNativeController);
 
     NSThread *thread = [[NSThread alloc] initWithBlock:^{
         @autoreleasepool {
@@ -869,6 +881,8 @@ static void *FactorioOpenFramework(NSString *name, int flags)
     thread.stackSize = 8 * 1024 * 1024;
     [thread start];
 }
+
++ (BOOL)usesNativeController { return FactorioNativeController; }
 
 @end
 #endif

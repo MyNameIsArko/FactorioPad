@@ -136,7 +136,7 @@ final class FactorioHostUIView: UIView {
         let active = applicationActive && inputEnabled
         inputActive = active
         primaryTouch = nil
-        cursorDisplayLink?.isPaused = !active
+        cursorDisplayLink?.isPaused = !applicationActive
         FactorioControllerBridgeSetActive(active)
         if !active {
             releasePhysicalInput()
@@ -145,6 +145,7 @@ final class FactorioHostUIView: UIView {
         } else if window != nil {
             becomeFirstResponder()
         }
+        FactorioInputSetActive(active)
         // Keep the game rendering under help sheets. Suspend only for app lifecycle events.
         FactorioMetalLayer.setApplicationActive(applicationActive)
     }
@@ -188,8 +189,10 @@ final class FactorioHostUIView: UIView {
     }
 
     @objc private func updateControllerCursor() {
+        // SDL can create or refocus its window while an app screen is open.
+        FactorioInputSetActive(inputActive)
         controllerCursor.isHidden = !inputActive || (!(hasPhysicalMouse && useRawMouse)
-            && !GCController.controllers().contains { $0.extendedGamepad != nil })
+            && (FactorioLoader.usesNativeController || !hasGamepad))
         controllerCursor.frame.origin = FactorioControllerBridgeGetCursorPosition()
     }
 

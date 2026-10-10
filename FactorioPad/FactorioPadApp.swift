@@ -74,7 +74,8 @@ struct FactorioLaunchView: View {
                             FactorioControlsView(onClose: { showsControls = false }, onSaves: {
                                 showsControls = false
                                 showsSaves = true
-                            }, logURL: FactorioLoader.startupLogURL())
+                            }, logURL: FactorioLoader.startupLogURL(),
+                                nativeControllerActive: FactorioLoader.usesNativeController)
                         }
                     }
             } else {
@@ -98,12 +99,14 @@ struct FactorioLaunchView: View {
                     } else if stage == .stopped {
                         Text(status ?? "Factorio stopped.")
                             .multilineTextAlignment(.center)
+                        FactorioControllerModePicker(activeNativeController: FactorioLoader.usesNativeController)
                         if FactorioSaveSync.hasFolder {
                             Button("Retry save sync") { Task { await syncAfterPlay() } }
                                 .buttonStyle(.borderedProminent)
                         }
                         Button("Choose save folder") { selectsGameFolder = false; showsFolderPicker = true }
                     } else {
+                        FactorioControllerModePicker()
                         Text("Choose a folder in iCloud Drive to share saves with Factorio on your computer.")
                             .multilineTextAlignment(.center)
                         if let status { Text(status).foregroundStyle(.secondary) }

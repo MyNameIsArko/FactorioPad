@@ -5,15 +5,45 @@
 static NSMutableArray<NSData *> *events;
 static uint16_t sdlModifiers;
 static int window;
+static void *keyboardFocus = &window;
+static BOOL windowExists = YES;
+static int joystick;
+static BOOL nativeButtonHeld;
+static float nativeAxis;
+static int joystickLockDepth, recenterCount, focusChanges;
+static BOOL acceptsBackgroundHint = YES;
 
 int SDL_PushEvent(FPSDLEvent *event)
 {
     [events addObject:[NSData dataWithBytes:event length:sizeof(*event)]];
     return 1;
 }
-void *SDL_GetKeyboardFocus(void) { return &window; }
+void *SDL_GetKeyboardFocus(void) { return keyboardFocus; }
 uint32_t SDL_GetWindowID(void *value) { NSCAssert(value == &window, @"window must match"); return 77; }
 uint32_t SDL_GetTicks(void) { return 42; }
+void SDL_SetKeyboardFocus(void *value) {
+    NSCAssert(joystickLockDepth == 1, @"focus changes must hold SDL's joystick lock");
+    keyboardFocus = value;
+    focusChanges++;
+}
+void *SDL_GetWindowFromID(uint32_t windowID) { return windowID == 77 && windowExists ? &window : NULL; }
+void SDL_LockJoysticks(void) { joystickLockDepth++; }
+void SDL_UnlockJoysticks(void) { NSCAssert(joystickLockDepth == 1, @"joystick locks must balance"); joystickLockDepth--; }
+int SDL_NumJoysticks(void) { return 2; }
+int32_t SDL_JoystickGetDeviceInstanceID(int index) { return 100 + index; }
+void *SDL_JoystickFromInstanceID(int32_t instanceID) { return instanceID == 100 ? &joystick : NULL; }
+void SDL_PrivateJoystickForceRecentering(void *value) {
+    NSCAssert(value == &joystick && joystickLockDepth == 1 && !keyboardFocus,
+        @"release held controls under SDL's lock after focus loss");
+    nativeButtonHeld = NO;
+    nativeAxis = 0;
+    recenterCount++;
+}
+int SDL_SetHintWithPriority(const char *name, const char *value, int priority) {
+    NSCAssert(strcmp(name, "SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS") == 0 && strcmp(value, "0") == 0 && priority == 2,
+        @"native input must respect focus even if the game enables background events");
+    return acceptsBackgroundHint;
+}
 void SDL_SetModState(uint16_t modifiers) { sdlModifiers = modifiers; }
 int SDL_SendKeyboardKey(uint8_t state, int32_t scancode)
 {
@@ -34,7 +64,10 @@ int main(void)
     @autoreleasepool {
         events = [NSMutableArray array];
         void *fixture = dlopen(NULL, RTLD_NOW);
-        NSCAssert(FactorioKeyboardBridgeSetGuestHandle(fixture), @"all SDL functions must resolve through dlsym");
+        NSCAssert(FactorioKeyboardBridgeSetGuestHandle(fixture, NO), @"all SDL functions must resolve through dlsym");
+        FactorioInputSetActive(NO);
+        NSCAssert(keyboardFocus == &window && !gSetKeyboardFocus && !focusChanges,
+            @"mapped mode must keep its existing focus behavior");
         gControllerQueue = dispatch_queue_create("FactorioPad.InputTest", DISPATCH_QUEUE_SERIAL);
         GCController *controller = [GCController controllerWithExtendedGamepad];
         FPInstallController(controller);
@@ -146,8 +179,36 @@ int main(void)
         FactorioMouseButton(0, YES, 0, 0);
         FactorioMouseButton(33, YES, 0, 0);
         NSCAssert(events.count == previousCount && gSyntheticMouseButtons == 0, @"invalid button numbers must be rejected");
+        NSCAssert(FactorioKeyboardBridgeSetGuestHandle(fixture, YES), @"native functions must resolve from the guest");
+        nativeButtonHeld = YES;
+        nativeAxis = 0.8f;
+        FactorioInputSetActive(NO);
+        NSCAssert(!keyboardFocus && !nativeButtonHeld && nativeAxis == 0 && recenterCount == 1 && joystickLockDepth == 0,
+            @"app screens must remove SDL focus and release held native controls");
+        FactorioInputSetActive(NO);
+        NSCAssert(recenterCount == 1 && focusChanges == 1, @"repeated suspension must not emit duplicate releases");
+        FactorioInputSetActive(YES);
+        NSCAssert(keyboardFocus == &window && gSuspendedWindowID == 0 && focusChanges == 2,
+            @"closing an app screen must restore the game's focus");
+        FactorioInputSetActive(YES);
+        NSCAssert(focusChanges == 2, @"repeated resume must not change focus");
+        keyboardFocus = NULL;
+        FactorioInputSetActive(NO);
+        NSCAssert(gSuspendedWindowID == 0, @"suspension before window creation must be harmless");
+        keyboardFocus = &window;
+        FactorioInputSetActive(NO);
+        NSCAssert(!keyboardFocus && recenterCount == 2,
+            @"a window created or refocused behind an app screen must also lose input");
+        windowExists = NO;
+        FactorioInputSetActive(YES);
+        NSCAssert(!keyboardFocus && gSuspendedWindowID == 0, @"resume must not use a destroyed SDL window");
+        windowExists = YES;
+        acceptsBackgroundHint = NO;
+        NSCAssert(!FactorioKeyboardBridgeSetGuestHandle(fixture, YES) && !gSetKeyboardFocus && !gPushEvent,
+            @"native mode must fail safely if background input cannot be blocked");
+        acceptsBackgroundHint = YES;
         void *incompatible = dlopen("/usr/lib/libSystem.B.dylib", RTLD_NOW | RTLD_LOCAL);
-        NSCAssert(incompatible && !FactorioKeyboardBridgeSetGuestHandle(incompatible),
+        NSCAssert(incompatible && !FactorioKeyboardBridgeSetGuestHandle(incompatible, NO),
             @"an incompatible guest must fail initialization");
         previousCount = events.count;
         FactorioKeyboardReturn();

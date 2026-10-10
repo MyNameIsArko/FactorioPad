@@ -5,6 +5,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface FactorioLoader : NSObject
 
+@property(class, nonatomic, readonly) BOOL usesNativeController;
+
 + (nullable NSURL *)startupLogURL;
 + (void)restoreStartupLogFolder;
 + (void)logMessage:(NSString *)message;
