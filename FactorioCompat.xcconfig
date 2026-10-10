@@ -1,5 +1,6 @@
 // These exports satisfy the guest binary's rewritten macOS dependencies.
 OTHER_LDFLAGS = $(inherited) \
+    -Wl,-reexport-lSystem \
     -Wl,-reexport_framework,Foundation \
     -Wl,-reexport_framework,CoreGraphics \
     -Wl,-reexport_framework,CoreVideo \
