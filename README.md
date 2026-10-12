@@ -1,6 +1,6 @@
 # FactorioPad
 
-Play Factorio on your iPhone or iPad. You need iOS 17 or iPadOS 17 or newer, plus a gamepad or a keyboard and mouse. Touch supports menus, but not touch-only gameplay.
+Play Factorio on your iPhone or iPad. You need iOS 17 or iPadOS 17 or newer. Use touch controls, a gamepad, or a keyboard and mouse.
 
 You need your own copy of Factorio. You do not need Xcode or a Mac.
 Tested on Factorio 2.0.77. Other versions are allowed but untested.
@@ -31,11 +31,28 @@ Keep your generated IPA private because it contains your Factorio executable.
 
 - A gamepad uses `Mouse and keyboard emulation` by default. Select `Factorio native controls` for analog movement and Factorio's controller interface.
 - Physical keyboards and mice support typing, clicks, dragging, and scrolling.
-- Touch supports menu taps and drags.
+- Touch controls provide movement, aiming, building, mining, and shortcuts on iPhone and iPad.
 - New installations use a 150% interface scale and one visible quickbar.
 - New freeplay games skip the opening cutscene and tutorial prompt.
 - Tap the keyboard button to type. Hold it to see the gamepad controls.
 - Full-screen play keeps a connected mouse pointer inside the game.
+
+## Play with touch controls
+
+Choose `Mouse and keyboard emulation` before you press `Play`.
+The default touch layout appears when no gamepad, keyboard, or mouse is connected.
+Tap the hand button to show or hide it. The app remembers that choice.
+
+Use `Direct taps` for menus and inventory taps or drags.
+Tap that button to switch to `Precision aim`. Drag on the game to move the pointer without clicking.
+Hold `Build / open` or `Mine` to act at the pointer. Release to stop.
+Drag the movement stick to walk. Pinch to zoom in `Precision aim`.
+
+Hold `Shoot` to fire while you move. Use `More` for maps, blueprints, zoom buttons, and other shortcuts.
+Tap `Shift` or `Ctrl` to turn the modifier on or off for item transfers and other actions.
+The active modifiers remain visible beside the aiming button.
+The controls use Factorio's default keyboard bindings. Custom bindings can change their actions.
+The layout fits the safe area on both iPhone and iPad. Layout editing is not included.
 
 ## Share saves through iCloud
 

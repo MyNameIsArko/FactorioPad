@@ -101,7 +101,7 @@ struct FactorioControlsView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Label("Controller controls", systemImage: "gamecontroller")
+                Label("Controls", systemImage: "gamecontroller")
                     .font(.title2.bold())
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
@@ -120,6 +120,14 @@ struct FactorioControlsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     FactorioControllerModePicker(activeNativeController: nativeControllerActive)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Touch controls", systemImage: "hand.tap").font(.headline)
+                        Text("Touch gameplay uses Mouse and keyboard emulation. Tap the hand button to show or hide the default layout.")
+                        Text("Start with Direct taps for menus. Switch to Precision aim to drag the pointer without clicking. Hold Build or Mine to act.")
+                        Text("Use More for extra actions. Shift and Ctrl stay on until you tap them again. Pinch to zoom in Precision aim.")
+                        Text("These controls use Factorio's default keyboard bindings. Custom bindings in Factorio can change their actions.")
+                    }
+                    .foregroundStyle(.secondary)
                     if let log = logURL {
                         ShareLink("Share log", item: log)
                             .buttonStyle(.bordered)

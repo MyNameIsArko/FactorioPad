@@ -53,6 +53,13 @@ import UIKit
 
 final class FactorioTouchOnlyButton: UIButton {
     override var canBecomeFocused: Bool { false }
+    var onAccessibilityActivate: (() -> Void)?
+
+    override func accessibilityActivate() -> Bool {
+        guard let onAccessibilityActivate else { return super.accessibilityActivate() }
+        onAccessibilityActivate()
+        return true
+    }
 }
 
 final class FactorioOnScreenKeyboardView: UIView {

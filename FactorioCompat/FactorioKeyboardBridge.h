@@ -40,6 +40,11 @@ void FactorioKeyboardKeyUp(
 void FactorioKeyboardPhysicalKeyDown(int32_t scancode, int32_t keycode);
 void FactorioKeyboardPhysicalKeyUp(int32_t scancode, int32_t keycode);
 
+void FactorioKeyboardTouchKeyDown(int32_t scancode, int32_t keycode);
+void FactorioKeyboardTouchKeyUp(int32_t scancode, int32_t keycode);
+void FactorioKeyboardSetTouchModifierState(uint16_t modifiers);
+void FactorioTouchMouseButton(uint8_t button, bool pressed, int32_t x, int32_t y);
+
 void FactorioKeyboardSetModifierState(
     uint16_t modifiers
 );

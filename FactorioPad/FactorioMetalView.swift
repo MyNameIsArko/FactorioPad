@@ -3,7 +3,7 @@ import GameController
 import SwiftUI
 import UIKit
 
-final class FactorioHostUIView: UIView {
+final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
     var inputEnabled = true {
         didSet {
             setInputActive(window != nil && UIApplication.shared.applicationState == .active)
@@ -32,6 +32,17 @@ final class FactorioHostUIView: UIView {
     private let controllerCursor = FactorioControllerCursorView(frame: CGRect(x: 0, y: 0, width: 18, height: 23))
     private let onScreenKeyboard = FactorioOnScreenKeyboardView()
     private let keyboardButton = FactorioTouchOnlyButton(type: .system)
+    private let touchControls = FactorioTouchControlsView()
+    private let touchControlsButton = FactorioTouchOnlyButton(type: .system)
+    private var lastAimPoint: CGPoint?
+    private var touchKeys = Set<Int32>()
+    private var touchMovement = Set<Int32>()
+    private var touchActions = Set<FactorioTouchAction>()
+    private var touchModifiers: UInt16 = 0
+    private var directTouchHeld = false
+    private var legacyTouchHeld = false
+    private var pinchScale: CGFloat = 1
+    private var touchViewportSize = CGSize.zero
 
     override class var layerClass: AnyClass { FactorioMetalLayer.self }
     override var canBecomeFirstResponder: Bool { true }
@@ -49,20 +60,31 @@ final class FactorioHostUIView: UIView {
             self?.keyboardButton.accessibilityLabel = "Show keyboard"
         }
         addSubview(controllerCursor)
+        touchControls.isHidden = true
+        touchControls.onAction = { [weak self] in self?.touchAction($0, pressed: $1) }
+        touchControls.onMovement = { [weak self] in self?.touchMovementChanged($0) }
+        touchControls.onModeChange = { [weak self] in self?.cancelGameTouch() }
+        addSubview(touchControls)
         addSubview(onScreenKeyboard)
         keyboardButton.setImage(UIImage(systemName: "keyboard"), for: .normal)
         keyboardButton.tintColor = .white
         keyboardButton.backgroundColor = UIColor.black.withAlphaComponent(0.4)
         keyboardButton.layer.cornerRadius = 22
         keyboardButton.accessibilityLabel = "Show keyboard"
-        keyboardButton.accessibilityHint = "Touch and hold for controller controls."
+        keyboardButton.accessibilityHint = "Touch and hold for controls."
         keyboardButton.accessibilityCustomActions = [UIAccessibilityCustomAction(
-            name: "Show controller controls", target: self, selector: #selector(showControlsWithAccessibility))]
+            name: "Show controls", target: self, selector: #selector(showControlsWithAccessibility))]
         keyboardButton.addTarget(self, action: #selector(toggleKeyboard), for: .touchUpInside)
         let controlsPress = UILongPressGestureRecognizer(target: self, action: #selector(showControls))
         controlsPress.minimumPressDuration = 0.5
         keyboardButton.addGestureRecognizer(controlsPress)
         addSubview(keyboardButton)
+        touchControlsButton.setImage(UIImage(systemName: "hand.tap"), for: .normal)
+        touchControlsButton.tintColor = .white
+        touchControlsButton.backgroundColor = UIColor.black.withAlphaComponent(0.6)
+        touchControlsButton.layer.cornerRadius = 12
+        touchControlsButton.addTarget(self, action: #selector(toggleTouchControls), for: .touchUpInside)
+        addSubview(touchControlsButton)
         updateKeyboardButton()
 
         let hover = UIHoverGestureRecognizer(target: self, action: #selector(pointerHovered))
@@ -72,6 +94,9 @@ final class FactorioHostUIView: UIView {
         scroll.allowedTouchTypes = []
         scroll.cancelsTouchesInView = false
         addGestureRecognizer(scroll)
+        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(touchPinched))
+        pinch.delegate = self
+        addGestureRecognizer(pinch)
 
         let center = NotificationCenter.default
         lifecycleObservers.append(center.addObserver(forName: UIApplication.willResignActiveNotification,
@@ -107,6 +132,7 @@ final class FactorioHostUIView: UIView {
                     at: self.pointerPosition ?? FactorioControllerBridgeGetCursorPosition())
             }
             self.updatePointerLockPreference()
+            self.updateTouchControls()
             for replacement in GCMouse.mice() { self.installMouse(replacement) }
         })
         lifecycleObservers.append(center.addObserver(forName: UIPointerLockState.didChangeNotification,
@@ -135,17 +161,18 @@ final class FactorioHostUIView: UIView {
     private func setInputActive(_ applicationActive: Bool) {
         let active = applicationActive && inputEnabled
         inputActive = active
-        primaryTouch = nil
+        cancelGameTouch()
         cursorDisplayLink?.isPaused = !applicationActive
         FactorioControllerBridgeSetActive(active)
         if !active {
+            releaseTouchInput()
             releasePhysicalInput()
-            FactorioTouchCancel()
             onScreenKeyboard.reset()
         } else if window != nil {
             becomeFirstResponder()
         }
         FactorioInputSetActive(active)
+        updateTouchControls()
         // Keep the game rendering under help sheets. Suspend only for app lifecycle events.
         FactorioMetalLayer.setApplicationActive(applicationActive)
     }
@@ -169,11 +196,16 @@ final class FactorioHostUIView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         guard window != nil, bounds.width > 0, bounds.height > 0 else { return }
+        if touchViewportSize != bounds.size {
+            cancelGameTouch()
+            releaseTouchInput()
+            touchViewportSize = bounds.size
+        }
         FactorioMetalHost.setHostView(self)
-        // Use equal proportional edge gaps, not the side inset reserved for the iPhone notch.
-        let buttonInset = max(8, min(bounds.width, bounds.height) * 0.016)
-        keyboardButton.frame = CGRect(x: bounds.maxX - buttonInset - 44,
-            y: bounds.maxY - buttonInset - 44, width: 44, height: 44)
+        let safe = bounds.inset(by: safeAreaInsets).insetBy(dx: 12, dy: 12)
+        keyboardButton.frame = CGRect(x: safe.maxX - 44, y: safe.minY, width: 44, height: 44)
+        touchControlsButton.frame = CGRect(x: safe.minX, y: safe.minY, width: 44, height: 44)
+        touchControls.frame = bounds
         let keyboardHeight = min(280, bounds.height)
         onScreenKeyboard.frame = CGRect(x: 0, y: bounds.maxY - keyboardHeight,
             width: bounds.width, height: keyboardHeight)
@@ -183,8 +215,10 @@ final class FactorioHostUIView: UIView {
             Self.factorioStarted = true
             configureAudioSession()
             FactorioLoader.start(withWindowSize: bounds.size)
+            updateTouchControls()
         }
         FactorioControllerBridgeSetViewportSize(bounds.width, bounds.height)
+        if !touchControls.isHidden && pointerPosition == nil { movePointer(to: CGPoint(x: bounds.midX, y: bounds.midY)) }
         FactorioTouchUpdateWindowSize()
     }
 
@@ -192,7 +226,7 @@ final class FactorioHostUIView: UIView {
         // SDL can create or refocus its window while an app screen is open.
         FactorioInputSetActive(inputActive)
         controllerCursor.isHidden = !inputActive || (!(hasPhysicalMouse && useRawMouse)
-            && (FactorioLoader.usesNativeController || !hasGamepad))
+            && (FactorioLoader.usesNativeController || !hasGamepad) && touchControls.isHidden)
         controllerCursor.frame.origin = FactorioControllerBridgeGetCursorPosition()
     }
 
@@ -209,6 +243,131 @@ final class FactorioHostUIView: UIView {
             onScreenKeyboard.reset()
         }
         keyboardButton.isHidden = (hasPhysicalKeyboard && !hasGamepad) || !onScreenKeyboard.isHidden
+        updateTouchControls()
+    }
+
+    @objc private func toggleTouchControls() {
+        guard !FactorioLoader.usesNativeController else {
+            requestControls()
+            return
+        }
+        UserDefaults.standard.set(touchControls.isHidden, forKey: "FactorioTouchControls")
+        updateTouchControls()
+    }
+
+    private func updateTouchControls() {
+        let wanted = (UserDefaults.standard.object(forKey: "FactorioTouchControls") as? Bool)
+            ?? (!hasGamepad && !hasPhysicalKeyboard && !hasPhysicalMouse)
+        let hidden = !wanted || !inputActive || !onScreenKeyboard.isHidden || FactorioLoader.usesNativeController
+        if touchControls.isHidden != hidden {
+            cancelGameTouch()
+            releaseTouchInput()
+            touchControls.isHidden = hidden
+            if !hidden && pointerPosition == nil && bounds.width > 0 {
+                movePointer(to: CGPoint(x: bounds.midX, y: bounds.midY))
+            }
+        }
+        touchControlsButton.isHidden = !inputActive || !onScreenKeyboard.isHidden
+        touchControlsButton.accessibilityLabel = hidden ? "Show touch controls" : "Hide touch controls"
+        touchControlsButton.tintColor = hidden ? .white : .systemOrange
+    }
+
+    private func setTouchKey(_ code: Int32, pressed: Bool, symbol: Int32 = 0) {
+        if pressed {
+            if touchKeys.insert(code).inserted { FactorioKeyboardTouchKeyDown(code, symbol) }
+        } else if touchKeys.remove(code) != nil { FactorioKeyboardTouchKeyUp(code, symbol) }
+    }
+
+    private func touchMovementChanged(_ keys: Set<Int32>) {
+        guard inputActive || keys.isEmpty else { return }
+        FactorioInputPerform {
+            for code in self.touchMovement.subtracting(keys) { self.setTouchKey(code, pressed: false) }
+            for code in keys.subtracting(self.touchMovement) { self.setTouchKey(code, pressed: true) }
+            self.touchMovement = keys
+        }
+    }
+
+    private func setTouchModifiers(_ modifiers: UInt16) {
+        FactorioKeyboardSetTouchModifierState(modifiers)
+        for (mask, code) in [(UInt16(0x0001), Int32(225)), (0x0040, 224), (0x0100, 226)] {
+            setTouchKey(code, pressed: modifiers & mask != 0, symbol: 0x40000000 | code)
+        }
+        FactorioKeyboardSetTouchModifierState(modifiers)
+    }
+
+    private func updateTouchMouseButtons() {
+        let point = pointerPosition ?? FactorioControllerBridgeGetCursorPosition()
+        FactorioTouchMouseButton(1, directTouchHeld || touchActions.contains(.build), Int32(point.x.rounded()), Int32(point.y.rounded()))
+        FactorioTouchMouseButton(3, touchActions.contains(.mine), Int32(point.x.rounded()), Int32(point.y.rounded()))
+    }
+
+    private func touchAction(_ action: FactorioTouchAction, pressed: Bool) {
+        guard inputActive || !pressed else { return }
+        FactorioInputPerform {
+            if action == .build || action == .mine {
+                if pressed { self.touchActions.insert(action) } else { self.touchActions.remove(action) }
+                self.updateTouchMouseButtons()
+            } else if action == .shift || action == .control {
+                self.touchModifiers ^= action == .shift ? 0x0001 : 0x0040
+                self.setTouchModifiers(self.touchModifiers)
+                self.touchControls.setSelected(action, self.touchModifiers & (action == .shift ? 0x0001 : 0x0040) != 0)
+            } else if let key = action.key {
+                if action.held {
+                    self.setTouchKey(key.code, pressed: pressed, symbol: key.symbol)
+                } else if pressed {
+                    self.setTouchModifiers(self.touchModifiers | key.modifiers)
+                    self.setTouchKey(key.code, pressed: true, symbol: key.symbol)
+                    self.setTouchKey(key.code, pressed: false, symbol: key.symbol)
+                    self.setTouchModifiers(self.touchModifiers)
+                }
+            } else if pressed && (action == .zoomIn || action == .zoomOut) {
+                FactorioMouseWheel(0, action == .zoomIn ? 1 : -1)
+            }
+        }
+        if action == .keyboard && pressed { toggleKeyboard() }
+        if action == .more && pressed { cancelGameTouch() }
+    }
+
+    private func releaseTouchInput() {
+        touchControls.reset()
+        FactorioInputPerform {
+            self.directTouchHeld = false
+            self.touchActions.removeAll()
+            self.updateTouchMouseButtons()
+            self.touchModifiers = 0
+            self.setTouchModifiers(0)
+            for code in Array(self.touchKeys) { self.setTouchKey(code, pressed: false) }
+            self.touchMovement.removeAll()
+        }
+    }
+
+    private func cancelGameTouch() {
+        if legacyTouchHeld { FactorioTouchCancel() }
+        legacyTouchHeld = false
+        primaryTouch = nil
+        lastAimPoint = nil
+        directTouchHeld = false
+        updateTouchMouseButtons()
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        inputActive && !touchControls.isHidden && touchControls.precision && touch.view === self
+            && (touch.type == .direct || touch.type == .pencil)
+    }
+
+    @objc private func touchPinched(_ gesture: UIPinchGestureRecognizer) {
+        guard inputActive, !touchControls.isHidden, touchControls.precision else { return }
+        if gesture.state == .began {
+            releaseTouchInput()
+            cancelGameTouch()
+            pinchScale = gesture.scale
+        } else if gesture.state == .changed {
+            let steps = Int32((log(gesture.scale / pinchScale) / log(1.15)).rounded(.towardZero))
+            if steps != 0 {
+                FactorioMouseWheel(0, steps)
+                pinchScale *= pow(1.15, CGFloat(steps))
+            }
+        }
     }
 
     @objc private func showControls(_ gesture: UILongPressGestureRecognizer) {
@@ -349,6 +508,7 @@ final class FactorioHostUIView: UIView {
         guard !mice.contains(where: { $0 === mouse }), let input = mouse.mouseInput else { return }
         let device = ObjectIdentifier(mouse)
         mice.append(mouse)
+        updateTouchControls()
         updatePointerLockPreference()
         mouse.handlerQueue = .main
         input.mouseMovedHandler = { [weak self] _, dx, dy in
@@ -418,7 +578,17 @@ final class FactorioHostUIView: UIView {
         }
         guard inputActive, primaryTouch == nil, let touch = touches.first else { return }
         primaryTouch = touch
-        updateTouch(touch, send: FactorioTouchBegin)
+        if !touchControls.isHidden {
+            lastAimPoint = touch.location(in: self)
+            if !touchControls.precision {
+                movePointer(to: touch.location(in: self))
+                directTouchHeld = true
+                updateTouchMouseButtons()
+            }
+        } else {
+            legacyTouchHeld = true
+            updateTouch(touch, send: FactorioTouchBegin)
+        }
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -429,7 +599,14 @@ final class FactorioHostUIView: UIView {
         }
         guard inputActive, let primaryTouch, touches.contains(primaryTouch) else { return }
         for touch in event?.coalescedTouches(for: primaryTouch) ?? [primaryTouch] {
-            updateTouch(touch, send: FactorioTouchMove)
+            if !touchControls.isHidden {
+                let point = touch.location(in: self)
+                if touchControls.precision, let previous = lastAimPoint {
+                    let origin = pointerPosition ?? FactorioControllerBridgeGetCursorPosition()
+                    movePointer(to: CGPoint(x: origin.x + point.x - previous.x, y: origin.y + point.y - previous.y))
+                } else { movePointer(to: point) }
+                lastAimPoint = point
+            } else { updateTouch(touch, send: FactorioTouchMove) }
         }
     }
 
@@ -440,7 +617,15 @@ final class FactorioHostUIView: UIView {
             return
         }
         guard inputActive, let primaryTouch, touches.contains(primaryTouch) else { return }
-        updateTouch(primaryTouch, send: FactorioTouchEnd)
+        if !touchControls.isHidden {
+            if !touchControls.precision { movePointer(to: primaryTouch.location(in: self)) }
+            directTouchHeld = false
+            updateTouchMouseButtons()
+            lastAimPoint = nil
+        } else {
+            updateTouch(primaryTouch, send: FactorioTouchEnd)
+            legacyTouchHeld = false
+        }
         self.primaryTouch = nil
     }
 
@@ -451,8 +636,7 @@ final class FactorioHostUIView: UIView {
             return
         }
         guard let primaryTouch, touches.contains(primaryTouch) else { return }
-        FactorioTouchCancel()
-        self.primaryTouch = nil
+        cancelGameTouch()
     }
 
     private func configureAudioSession() {

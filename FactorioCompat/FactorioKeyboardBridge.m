@@ -199,10 +199,14 @@ static FPUint16
 static FPUint16
     gPhysicalModifiers = 0;
 
+static FPUint16 gTouchModifiers = 0;
+
 static FPUint32
     gSyntheticMouseButtons = 0;
 
-enum { FP_KEY_SYNTHETIC = 1, FP_KEY_PHYSICAL = 2, FP_KEY_COUNT = 512 };
+static FPUint32 gTouchMouseButtons = 0;
+
+enum { FP_KEY_SYNTHETIC = 1, FP_KEY_PHYSICAL = 2, FP_KEY_TOUCH = 4, FP_KEY_COUNT = 512 };
 static FPUint8 gKeySources[FP_KEY_COUNT];
 
 static NSObject *FPInputLock(void)
@@ -375,7 +379,9 @@ FactorioKeyboardBridgeSetGuestHandle(
         gSuspendedWindowID = 0;
         gSyntheticModifiers = 0;
         gPhysicalModifiers = 0;
+        gTouchModifiers = 0;
         gSyntheticMouseButtons = 0;
+        gTouchMouseButtons = 0;
         memset(gKeySources, 0, sizeof(gKeySources));
         return ready;
     }
@@ -591,7 +597,7 @@ FactorioKeyboardSetModifierState(
 
         if (gSetModState) {
             gSetModState(
-                gSyntheticModifiers | gPhysicalModifiers
+                gSyntheticModifiers | gPhysicalModifiers | gTouchModifiers
             );
         }
     }
@@ -602,7 +608,15 @@ FactorioKeyboardSetPhysicalModifierState(uint16_t modifiers)
 {
     @synchronized (FPInputLock()) {
         gPhysicalModifiers = modifiers;
-        if (gSetModState) gSetModState(gSyntheticModifiers | gPhysicalModifiers);
+        if (gSetModState) gSetModState(gSyntheticModifiers | gPhysicalModifiers | gTouchModifiers);
+    }
+}
+
+void FactorioKeyboardSetTouchModifierState(uint16_t modifiers)
+{
+    @synchronized (FPInputLock()) {
+        gTouchModifiers = modifiers;
+        if (gSetModState) gSetModState(gSyntheticModifiers | gPhysicalModifiers | gTouchModifiers);
     }
 }
 
@@ -623,7 +637,7 @@ FPPushKeyboardState(
 
         if (gSetModState) {
             gSetModState(
-                gSyntheticModifiers | gPhysicalModifiers
+                gSyntheticModifiers | gPhysicalModifiers | gTouchModifiers
             );
         }
 
@@ -673,7 +687,7 @@ FPPushKeyboardState(
         keycode;
 
     event.key.keysym.mod =
-        gSyntheticModifiers | gPhysicalModifiers;
+        gSyntheticModifiers | gPhysicalModifiers | gTouchModifiers;
 
     gPushEvent(
         &event
@@ -717,6 +731,16 @@ void FactorioKeyboardPhysicalKeyUp(int32_t scancode, int32_t keycode)
     @synchronized (FPInputLock()) { FPSetKeySource(scancode, keycode, FP_KEY_PHYSICAL, FP_SDL_RELEASED); }
 }
 
+void FactorioKeyboardTouchKeyDown(int32_t scancode, int32_t keycode)
+{
+    @synchronized (FPInputLock()) { FPSetKeySource(scancode, keycode, FP_KEY_TOUCH, FP_SDL_PRESSED); }
+}
+
+void FactorioKeyboardTouchKeyUp(int32_t scancode, int32_t keycode)
+{
+    @synchronized (FPInputLock()) { FPSetKeySource(scancode, keycode, FP_KEY_TOUCH, FP_SDL_RELEASED); }
+}
+
 
 
 void
@@ -751,7 +775,7 @@ FactorioMouseMove(
         event.motion.which = 0;
 
         event.motion.state =
-            gSyntheticMouseButtons;
+            gSyntheticMouseButtons | gTouchMouseButtons;
 
         event.motion.x = x;
         event.motion.y = y;
@@ -766,12 +790,13 @@ FactorioMouseMove(
 
 
 
-void
-FactorioMouseButton(
+static void
+FPSetMouseButton(
     uint8_t button,
     bool pressed,
     int32_t x,
-    int32_t y
+    int32_t y,
+    FPUint32 *source
 )
 {
     @synchronized (FPInputLock()) {
@@ -780,13 +805,11 @@ FactorioMouseButton(
             return;
         }
 
-        if (pressed) {
-            gSyntheticMouseButtons |=
-                (1u << (button - 1));
-        } else {
-            gSyntheticMouseButtons &=
-                ~(1u << (button - 1));
-        }
+        FPUint32 mask = 1u << (button - 1);
+        BOOL wasPressed = ((gSyntheticMouseButtons | gTouchMouseButtons) & mask) != 0;
+        if (pressed) *source |= mask; else *source &= ~mask;
+        BOOL isPressed = ((gSyntheticMouseButtons | gTouchMouseButtons) & mask) != 0;
+        if (wasPressed == isPressed) return;
 
         FPSDLEvent event;
         memset(
@@ -826,6 +849,16 @@ FactorioMouseButton(
 }
 
 
+
+void FactorioMouseButton(uint8_t button, bool pressed, int32_t x, int32_t y)
+{
+    FPSetMouseButton(button, pressed, x, y, &gSyntheticMouseButtons);
+}
+
+void FactorioTouchMouseButton(uint8_t button, bool pressed, int32_t x, int32_t y)
+{
+    FPSetMouseButton(button, pressed, x, y, &gTouchMouseButtons);
+}
 
 void
 FactorioMouseWheel(

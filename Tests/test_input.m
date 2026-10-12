@@ -175,6 +175,40 @@ int main(void)
         NSCAssert(sdlModifiers == FP_MOD_LSHIFT,
             @"releasing the controller must preserve a held physical modifier");
         FactorioKeyboardSetPhysicalModifierState(0);
+        [events removeAllObjects];
+        FactorioKeyboardTouchKeyDown(FP_SC_W, 'w');
+        FactorioKeyboardPhysicalKeyDown(FP_SC_W, 'w');
+        FactorioKeyboardKeyDown(FP_SC_W, 'w');
+        FactorioKeyboardTouchKeyUp(FP_SC_W, 'w');
+        FactorioKeyboardPhysicalKeyUp(FP_SC_W, 'w');
+        NSCAssert(events.count == 1 && gKeySources[FP_SC_W] == FP_KEY_SYNTHETIC,
+            @"releasing touch movement must preserve physical and controller owners");
+        FactorioKeyboardKeyUp(FP_SC_W, 'w');
+        NSCAssert(events.count == 2 && gKeySources[FP_SC_W] == 0, @"the last direction owner must release the key");
+        FactorioKeyboardSetTouchModifierState(FP_MOD_LCTRL);
+        FactorioKeyboardSetPhysicalModifierState(FP_MOD_LSHIFT);
+        FactorioKeyboardSetModifierState(0);
+        NSCAssert(sdlModifiers == (FP_MOD_LCTRL | FP_MOD_LSHIFT), @"touch modifiers must survive controller releases");
+        FactorioKeyboardSetTouchModifierState(0);
+        NSCAssert(sdlModifiers == FP_MOD_LSHIFT, @"touch release must preserve physical modifiers");
+        FactorioKeyboardSetPhysicalModifierState(0);
+        [events removeAllObjects];
+        FactorioTouchMouseButton(1, YES, 123, 456);
+        FactorioMouseButton(1, YES, 123, 456);
+        FactorioTouchMouseButton(1, NO, 123, 456);
+        NSCAssert(events.count == 1 && gSyntheticMouseButtons == 1 && gTouchMouseButtons == 0,
+            @"releasing touch Build must preserve a held physical or controller click");
+        FactorioMouseButton(1, NO, 123, 456);
+        NSCAssert(events.count == 2, @"the last mouse owner must release the button");
+        [events removeAllObjects];
+        FactorioTouchMouseButton(3, YES, 50, 60);
+        dispatch_sync(gControllerQueue, ^{ FPReleaseEverything(); });
+        FactorioMouseMove(51, 62, 1, 2);
+        FPSDLEvent touchDrag;
+        [events.lastObject getBytes:&touchDrag length:sizeof(touchDrag)];
+        NSCAssert(gTouchMouseButtons == 4 && touchDrag.motion.state == 4,
+            @"controller disconnect must preserve touch Mine and the drag state");
+        FactorioTouchMouseButton(3, NO, 50, 60);
         NSUInteger previousCount = events.count;
         FactorioMouseButton(0, YES, 0, 0);
         FactorioMouseButton(33, YES, 0, 0);
