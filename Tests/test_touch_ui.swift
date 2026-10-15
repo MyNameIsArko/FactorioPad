@@ -81,6 +81,8 @@ private func testControls(_ controls: FactorioTouchControlsView) {
     groups.selectedSegmentIndex = 1
     groups.sendActions(for: .valueChanged)
     controls.layoutIfNeeded()
+    assert(!all.contains { $0.accessibilityIdentifier == "touch-keyboard" && visible($0) },
+        "Keyboard belongs only in the App tab")
     button(.transferStack).sendActions(for: .touchUpInside)
     assert(!controls.precision && !visible(groups) && controls.targetAction == .transferStack)
     assert(compactMode.currentTitle == "Move stack\nTap item" && compactMode.accessibilityLabel == "Cancel Move stack")

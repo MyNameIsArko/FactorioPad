@@ -10,7 +10,7 @@ enum FactorioTouchAction: String, CaseIterable {
     static let primary: [Self] = [.build, .mine, .rotate, .pick, .inventory, .shoot, .more]
     static let groups: [[Self]] = [
         [.copy, .paste, .undo, .blueprints, .deconstruct, .upgrade],
-        [.transferStack, .transferAll, .pickup, .inventory, .back, .keyboard],
+        [.transferStack, .transferAll, .pickup, .inventory, .back],
         [.map, .research, .alt, .vehicle, .zoomIn, .zoomOut],
         [.keyboard, .guide, .hideControls]
     ]

@@ -40,6 +40,7 @@ Keep your generated IPA private because it contains your Factorio executable.
 ## Play with touch controls
 
 Choose `Mouse and keyboard emulation` before you press `Play`.
+The hand button and touch gameplay overlay are unavailable in `Factorio native controls` mode. The keyboard button remains available for typing.
 The default touch layout appears when no gamepad, keyboard, or mouse is connected.
 Tap the hand button to show or hide it. The app remembers that choice.
 
@@ -51,7 +52,7 @@ Hold and drag `Mine` or `Fire` to aim while acting. Release to stop.
 Drag from anywhere on the movement pad to walk. Pinch to zoom in `Play` mode.
 
 Tap `Menus` or `Play` above the movement pad to switch modes.
-Use `Tools` to open a compact panel by the right action cluster. Choose `Build`, `Items`, or `World` for six actions.
+Use `Tools` to open a compact panel by the right action cluster. Choose `Build`, `Items`, or `World` for gameplay actions.
 Choose `App` in Tools for the keyboard, control guide, and hide control.
 After hiding the controls, tap the hand button near your left thumb to show them again.
 In `Tools` → `Items`, choose `Move stack` or `Move all`, then tap an item to transfer it.

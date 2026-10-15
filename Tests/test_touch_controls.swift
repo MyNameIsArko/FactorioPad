@@ -38,6 +38,8 @@ import CoreGraphics
         assert(movement(CGPoint(x: 56, y: 0), 0).isEmpty)
         assert(Set(FactorioTouchAction.primary + FactorioTouchAction.groups.flatMap { $0 }) == Set(FactorioTouchAction.allCases))
         assert(FactorioTouchAction.groups.allSatisfy { (1...6).contains($0.count) && Set($0).count == $0.count })
+        let groupedActions = FactorioTouchAction.groups.flatMap { $0 }
+        assert(Set(groupedActions).count == groupedActions.count, "Each action must appear in only one Tools tab")
         assert(FactorioTouchAction.copy.key?.modifiers == 0x0040)
         assert(FactorioTouchAction.deconstruct.key?.modifiers == 0x0100)
         assert(FactorioTouchAction.transferStack.targetModifiers == 0x0001)

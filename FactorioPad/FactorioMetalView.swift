@@ -253,10 +253,7 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
     }
 
     @objc private func toggleTouchControls() {
-        guard !FactorioLoader.usesNativeController else {
-            requestControls()
-            return
-        }
+        guard !FactorioLoader.usesNativeController else { return }
         UserDefaults.standard.set(touchControls.isHidden, forKey: "FactorioTouchControls")
         updateTouchControls()
     }
@@ -273,7 +270,7 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
                 movePointer(to: CGPoint(x: bounds.midX, y: bounds.midY))
             }
         }
-        touchControlsButton.isHidden = !inputActive || !onScreenKeyboard.isHidden || !hidden
+        touchControlsButton.isHidden = !inputActive || !onScreenKeyboard.isHidden || !hidden || FactorioLoader.usesNativeController
         keyboardButton.isHidden = (hasPhysicalKeyboard && !hasGamepad) || !onScreenKeyboard.isHidden || !hidden
         touchControlsButton.accessibilityLabel = hidden ? "Show touch controls" : "Hide touch controls"
         touchControlsButton.tintColor = hidden ? .white : .systemOrange

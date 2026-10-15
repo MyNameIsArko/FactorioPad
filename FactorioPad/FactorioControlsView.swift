@@ -140,6 +140,8 @@ struct FactorioControlsView: View {
                     if nativeControllerActive {
                         Text("Factorio handles your controller directly, with analog movement and its controller interface.")
                             .foregroundStyle(.secondary)
+                        Text("The hand button and touch gameplay overlay are unavailable in this mode. Use Mouse and keyboard emulation for touch gameplay.")
+                            .foregroundStyle(.secondary)
                         Text("Connect a controller before starting the game. Open Settings → Controls in Factorio to select controller input or change its bindings.")
                             .foregroundStyle(.secondary)
                         Text("Tap the keyboard button to type. Touch, physical keyboard, and mouse input remain available.")
