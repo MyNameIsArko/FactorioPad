@@ -95,9 +95,14 @@ private func testControls(_ controls: FactorioTouchControlsView) {
     compactMode.sendActions(for: .touchUpInside)
     assert(controls.targetAction == nil && !controls.precision, "Cancel must clear the target without switching modes")
     button(.inventory).sendActions(for: .touchUpInside)
-    assert(!controls.precision && !visible(build), "Inventory must return to direct touch with gameplay controls hidden")
+    assert(!controls.precision && !visible(build), "Items must preserve Menus mode")
     mode.selectedSegmentIndex = 1
     mode.sendActions(for: .valueChanged)
+    for _ in 0..<2 {
+        button(.inventory).sendActions(for: .touchUpInside)
+        assert(controls.precision && visible(build) && !visible(mode), "Opening or closing Items must preserve Play mode and the collapsed bar")
+        assert(actions.last!.0 == .inventory && actions.last!.1)
+    }
     build.sendActions(for: .touchDown)
     controls.reset()
     assert(actions.last!.0 == .build && !actions.last!.1)

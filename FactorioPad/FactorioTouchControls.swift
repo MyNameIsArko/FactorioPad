@@ -429,7 +429,7 @@ final class FactorioTouchControlsView: UIView {
                         self.setSelected(action, true)
                         self.updateMode()
                         UIAccessibility.post(notification: .announcement, argument: "\(action.title). Tap an item. Tap the mode button to cancel.")
-                    } else if [.inventory, .map, .research, .blueprints, .back].contains(action) { self.setPrecision(false) }
+                    } else if [.map, .research, .blueprints, .back].contains(action) { self.setPrecision(false) }
                     else if ![.zoomIn, .zoomOut].contains(action) { self.showPalette(false) }
                 }
             }, for: .touchUpInside)

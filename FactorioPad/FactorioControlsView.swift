@@ -123,7 +123,7 @@ struct FactorioControlsView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Label("Touch controls", systemImage: "hand.tap").font(.headline)
                         Text("Touch gameplay uses Mouse and keyboard emulation. Tap the hand button to show or hide the default layout.")
-                        Text("Use Menus to tap game windows directly. Choose Play for the movement pad and action buttons. Drag on the game to aim.")
+                        Text("Use Menus to tap game windows directly. Choose Play for the movement pad and action buttons. Drag on the game to aim. Items keeps your current touch mode.")
                         Text("Hold and drag Build, Mine, or Fire to aim while acting. Release to stop. Pinch to zoom in Play mode.")
                         Text("Tap Menus or Play above the movement pad to switch modes. Tap the chevron to expand or collapse the control bar.")
                         Text("Tools opens a compact panel beside your right thumb. Choose Build, Items, or World for actions.")

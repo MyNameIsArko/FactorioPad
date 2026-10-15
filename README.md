@@ -45,6 +45,7 @@ Tap the hand button to show or hide it. The app remembers that choice.
 
 Use `Menus` for direct taps and inventory drags. Gameplay controls collapse to leave the game windows clear.
 Choose `Play` for the movement pad and the action buttons. Drag on the game to aim without clicking.
+Opening or closing `Items` keeps your current touch mode.
 Hold `Build` to place or open at the pointer. Drag that button to aim while you build.
 Hold and drag `Mine` or `Fire` to aim while acting. Release to stop.
 Drag from anywhere on the movement pad to walk. Pinch to zoom in `Play` mode.
