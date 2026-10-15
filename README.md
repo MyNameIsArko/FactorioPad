@@ -43,16 +43,18 @@ Choose `Mouse and keyboard emulation` before you press `Play`.
 The default touch layout appears when no gamepad, keyboard, or mouse is connected.
 Tap the hand button to show or hide it. The app remembers that choice.
 
-Use `Direct taps` for menus and inventory taps or drags.
-Tap that button to switch to `Precision aim`. Drag on the game to move the pointer without clicking.
-Hold `Build / open` or `Mine` to act at the pointer. Release to stop.
-Drag the movement stick to walk. Pinch to zoom in `Precision aim`.
+Use `Menus` for direct taps and inventory drags. Gameplay controls collapse to leave the game windows clear.
+Choose `Play` for the movement pad and the action buttons. Drag on the game to aim without clicking.
+Hold `Build` to place or open at the pointer. Drag that button to aim while you build.
+Hold and drag `Mine` or `Fire` to aim while acting. Release to stop.
+Drag from anywhere on the movement pad to walk. Pinch to zoom in `Play` mode.
 
-Hold `Shoot` to fire while you move. Use `More` for maps, blueprints, zoom buttons, and other shortcuts.
-Tap `Shift` or `Ctrl` to turn the modifier on or off for item transfers and other actions.
-The active modifiers remain visible beside the aiming button.
+Use `Tools` to open the command palette. Choose `Build`, `Items`, or `World` for a group of six commands.
+In `Tools` → `Items`, tap `Shift` or `Ctrl` to turn the modifier on or off for transfers and other actions.
+Active modifiers remain visible below the top dock after you close Tools.
 The controls use Factorio's default keyboard bindings. Custom bindings can change their actions.
-The layout fits the safe area on both iPhone and iPad. Layout editing is not included.
+The controls sit inside the safe area, with extra room for your grip on both iPhone and iPad.
+Layout editing is not included.
 
 ## Share saves through iCloud
 

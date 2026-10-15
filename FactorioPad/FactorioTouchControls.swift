@@ -6,9 +6,12 @@ enum FactorioTouchAction: String, CaseIterable {
     case shift, control, shoot, pickup, map, research, alt, vehicle
     case copy, paste, undo, blueprints, deconstruct, upgrade, zoomIn, zoomOut, back, keyboard
 
-    static let primary: [Self] = [.build, .mine, .rotate, .pick, .inventory, .more]
-    static let secondary: [Self] = [.shift, .control, .pickup, .map, .research, .alt, .vehicle,
-        .copy, .paste, .undo, .blueprints, .deconstruct, .upgrade, .zoomIn, .zoomOut, .back, .keyboard]
+    static let primary: [Self] = [.build, .mine, .rotate, .pick, .inventory, .shoot, .more]
+    static let groups: [[Self]] = [
+        [.copy, .paste, .undo, .blueprints, .deconstruct, .upgrade],
+        [.shift, .control, .pickup, .inventory, .back, .keyboard],
+        [.map, .research, .alt, .vehicle, .zoomIn, .zoomOut]
+    ]
 
     var title: String {
         switch self {
@@ -68,30 +71,44 @@ enum FactorioTouchAction: String, CaseIterable {
 struct FactorioTouchLayout {
     let stick: CGRect
     let actions: [CGRect]
-    let shoot: CGRect
-    let mode: CGRect
+    let toolbar: CGRect
     let panel: CGRect
+    let menuActions: [CGRect]
+    let edgeInset: CGFloat
 
     init(safeBounds: CGRect) {
-        let area = safeBounds.insetBy(dx: 12, dy: 12)
-        let height: CGFloat = area.height < 480 ? 48 : 56
-        let width = height + 24
-        let gap: CGFloat = 8
-        let actionWidth = width * 2 + gap
-        let actionHeight = height * 3 + gap * 2
-        actions = FactorioTouchAction.primary.indices.map { index in
-            CGRect(x: area.maxX - actionWidth + CGFloat(index % 2) * (width + gap),
-                y: area.maxY - actionHeight + CGFloat(index / 2) * (height + gap), width: width, height: height)
+        let compact = safeBounds.height < 500 || safeBounds.width < 700
+        let edgeInset: CGFloat = compact ? 32 : 48
+        self.edgeInset = edgeInset
+        let bottom: CGFloat = compact ? 28 : 48
+        let diameter: CGFloat = compact ? 128 : 152
+        stick = CGRect(x: safeBounds.minX + edgeInset,
+            y: safeBounds.maxY - bottom - diameter, width: diameter, height: diameter)
+        let short = safeBounds.height < 330
+        let center = CGPoint(x: safeBounds.maxX - edgeInset - (short ? 84 : 100),
+            y: safeBounds.maxY - bottom - (short ? 84 : 102))
+        let size: CGFloat = compact ? 52 : 56
+        let positions: [(CGFloat, CGFloat, CGFloat)] = short ? [
+            (0, 0, 60), (0, 62, 44), (-62, 0, 44),
+            (-32, -56, 44), (32, -56, 44), (62, 0, 44), (56, 54, 44)
+        ] : [
+            (0, 0, compact ? 68 : 76), (0, 74, size), (-72, 0, size),
+            (-42, -66, size), (38, -66, size), (72, 0, size), (58, 66, size)
+        ]
+        actions = positions.map { x, y, size in
+            CGRect(x: center.x + x - size / 2, y: center.y + y - size / 2, width: size, height: size)
         }
-        shoot = CGRect(x: area.maxX - width, y: area.maxY - actionHeight - 52, width: width, height: 44)
-        let diameter: CGFloat = area.height < 480 ? 112 : 144
-        stick = CGRect(x: area.minX, y: area.maxY - diameter, width: diameter, height: diameter)
-        mode = CGRect(x: area.minX + 52, y: area.minY, width: 108, height: 44)
-        let panelWidth = min(340, area.width - actionWidth - gap)
-        let columns = panelWidth >= 300 ? 3 : 2
-        let rows = (FactorioTouchAction.secondary.count + columns - 1) / columns
-        panel = CGRect(x: area.minX, y: area.minY + 52,
-            width: panelWidth, height: min(CGFloat(rows) * 56 + 8, max(0, area.height - 52)))
+        let toolbarWidth = min(320, safeBounds.width - edgeInset * 2)
+        toolbar = CGRect(x: safeBounds.midX - toolbarWidth / 2,
+            y: safeBounds.minY + (compact ? 20 : 28), width: toolbarWidth, height: 52)
+        let panelWidth = min(352, safeBounds.width - 32)
+        let panelHeight = min(276, safeBounds.height - 24)
+        panel = CGRect(x: safeBounds.midX - panelWidth / 2, y: safeBounds.midY - panelHeight / 2,
+            width: panelWidth, height: panelHeight)
+        menuActions = (0..<3).map { index in
+            CGRect(x: safeBounds.maxX - edgeInset - 52 - CGFloat(2 - index) * 60,
+                y: safeBounds.maxY - bottom - 52, width: 52, height: 52)
+        }
     }
 
     static func movement(at point: CGPoint, radius: CGFloat) -> Set<Int32> {
@@ -109,84 +126,144 @@ struct FactorioTouchLayout {
 #if canImport(UIKit)
 import UIKit
 
+private let touchAmber = UIColor(red: 0.96, green: 0.70, blue: 0.30, alpha: 1)
+private let touchSurface = UIColor(red: 0.10, green: 0.12, blue: 0.13, alpha: 0.88)
+
+private final class FactorioTouchSegments: UISegmentedControl {
+    override var canBecomeFocused: Bool { false }
+}
+
+private extension FactorioTouchAction {
+    var symbol: String {
+        switch self {
+        case .build: return "hammer.fill"
+        case .mine: return "wrench.adjustable.fill"
+        case .rotate: return "rotate.right"
+        case .pick: return "eyedropper"
+        case .inventory: return "shippingbox.fill"
+        case .more: return "square.grid.2x2.fill"
+        case .shift: return "shift"
+        case .control: return "control"
+        case .shoot: return "scope"
+        case .pickup: return "hand.raised.fingers.spread.fill"
+        case .map: return "map.fill"
+        case .research: return "flask.fill"
+        case .alt: return "info.circle"
+        case .vehicle: return "car.fill"
+        case .copy: return "doc.on.doc"
+        case .paste: return "doc.on.clipboard"
+        case .undo: return "arrow.uturn.backward"
+        case .blueprints: return "book.closed.fill"
+        case .deconstruct: return "trash"
+        case .upgrade: return "arrow.up.square"
+        case .zoomIn: return "plus.magnifyingglass"
+        case .zoomOut: return "minus.magnifyingglass"
+        case .back: return "arrow.backward"
+        case .keyboard: return "keyboard"
+        }
+    }
+
+    var caption: String {
+        switch self {
+        case .build: return "Build"
+        case .pick: return "Pick"
+        case .inventory: return "Items"
+        case .more: return "Tools"
+        case .shoot: return "Fire"
+        case .blueprints: return "Plans"
+        case .deconstruct: return "Remove"
+        case .pickup: return "Collect"
+        case .back: return "Back"
+        case .copy: return "Copy"
+        default: return title
+        }
+    }
+}
+
 final class FactorioTouchControlsView: UIView {
     var onAction: ((FactorioTouchAction, Bool) -> Void)?
     var onMovement: ((Set<Int32>) -> Void)?
+    var onAim: ((CGPoint) -> Void)?
     var onModeChange: (() -> Void)?
+    var onHide: (() -> Void)?
+    var onHelp: (() -> Void)?
     private(set) var precision = false
     private let stick = FactorioTouchStickView()
-    private let modeButton = FactorioTouchOnlyButton(type: .system)
-    private let panel = UIScrollView()
+    private let toolbar = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialDark))
+    private let mode = FactorioTouchSegments(items: ["Menus", "Play"])
     private let modifierLabel = UILabel()
-    private var buttons: [FactorioTouchAction: UIButton] = [:]
+    private let palette = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterialDark))
+    private let groups = FactorioTouchSegments(items: ["Build", "Items", "World"])
+    private let closeButton = FactorioTouchOnlyButton(type: .custom)
+    private let backdrop = UIControl()
+    private var buttons: [FactorioTouchAction: FactorioTouchActionButton] = [:]
+    private var paletteButtons: [FactorioTouchAction: FactorioTouchActionButton] = [:]
+    private var utilityButtons: [UIButton] = []
+    private var menuButtons: [FactorioTouchActionButton] = []
     private var heldActions = Set<FactorioTouchAction>()
+    private let feedback = UISelectionFeedbackGenerator()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         overrideUserInterfaceStyle = .dark
         isMultipleTouchEnabled = true
+        backdrop.backgroundColor = UIColor.black.withAlphaComponent(0.25)
+        backdrop.isHidden = true
+        backdrop.addAction(UIAction { [weak self] _ in self?.showPalette(false) }, for: .touchUpInside)
+        addSubview(backdrop)
         stick.onMovement = { [weak self] in self?.onMovement?($0) }
         addSubview(stick)
-        configure(modeButton, title: "Direct taps")
-        modeButton.accessibilityHint = "Tap and drag directly in menus or the game. Tap to switch to precision aiming."
-        modeButton.addAction(UIAction { [weak self] _ in
-            guard let self else { return }
-            self.releaseHeldActions()
-            self.precision.toggle()
-            self.modeButton.setTitle(self.precision ? "Precision aim" : "Direct taps", for: .normal)
-            self.modeButton.accessibilityHint = self.precision
-                ? "Drag to aim without clicking. Tap to switch to direct taps."
-                : "Tap and drag directly in menus or the game. Tap to switch to precision aiming."
-            self.onModeChange?()
-        }, for: .touchUpInside)
-        addSubview(modeButton)
-        modifierLabel.textColor = .systemOrange
-        modifierLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        styleSurface(toolbar, radius: 26)
+        addSubview(toolbar)
+        mode.selectedSegmentIndex = 0
+        mode.selectedSegmentTintColor = UIColor.white.withAlphaComponent(0.18)
+        mode.setTitleTextAttributes([.foregroundColor: UIColor.white, .font: UIFont.systemFont(ofSize: 13, weight: .semibold)], for: .normal)
+        mode.accessibilityLabel = "Touch mode"
+        mode.accessibilityHint = "Menus uses direct touch. Play uses a movement pad and drag-to-aim controls."
+        mode.addAction(UIAction { [weak self] _ in self?.setPrecision(self?.mode.selectedSegmentIndex == 1) }, for: .valueChanged)
+        toolbar.contentView.addSubview(mode)
+        utilityButtons = [
+            utility("hand.tap", label: "Hide touch controls") { [weak self] in self?.onHide?() },
+            utility("keyboard", label: "Show keyboard") { [weak self] in self?.onAction?(.keyboard, true) },
+            utility("questionmark.circle", label: "Control guide") { [weak self] in self?.onHelp?() }
+        ]
+        utilityButtons.forEach { toolbar.contentView.addSubview($0) }
+        modifierLabel.textColor = touchAmber
+        modifierLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        modifierLabel.textAlignment = .center
         modifierLabel.isHidden = true
         addSubview(modifierLabel)
-        panel.isHidden = true
-        panel.backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.95)
-        panel.layer.cornerRadius = 16
-        panel.alwaysBounceVertical = false
-        addSubview(panel)
-        for action in FactorioTouchAction.allCases {
-            let button = FactorioTouchOnlyButton(type: .custom)
-            configure(button, title: action.title)
-            button.accessibilityHint = action.held ? "Touch and hold. Release to stop." : "Uses the default Factorio binding."
-            if action == .shift || action == .control {
-                button.accessibilityHint = "Tap to turn this modifier on or off."
-            }
-            if action.held {
-                button.addAction(UIAction { [weak self] _ in self?.press(action) }, for: [.touchDown, .touchDragEnter])
-                button.addAction(UIAction { [weak self] _ in
-                    self?.release(action)
-                }, for: .touchUpInside)
-                button.onAccessibilityActivate = { [weak self] in
-                    self?.press(action)
-                    self?.release(action)
-                }
-                button.addAction(UIAction { [weak self] _ in self?.release(action) },
-                    for: [.touchUpOutside, .touchCancel, .touchDragExit])
-                button.accessibilityCustomActions = [
-                    UIAccessibilityCustomAction(name: "Hold \(action.title)") { [weak self] _ in self?.press(action); return true },
-                    UIAccessibilityCustomAction(name: "Stop \(action.title)") { [weak self] _ in self?.release(action); return true }
-                ]
-            } else {
-                button.addAction(UIAction { [weak self] _ in
-                    guard let self else { return }
-                    if action == .more {
-                        self.releaseHeldActions()
-                        self.panel.isHidden.toggle()
-                        self.setSelected(action, !self.panel.isHidden)
-                        self.onAction?(action, true)
-                    } else {
-                        self.onAction?(action, true)
-                    }
-                }, for: .touchUpInside)
-            }
+        for action in FactorioTouchAction.primary {
+            let button = actionButton(action)
             buttons[action] = button
-            (FactorioTouchAction.primary.contains(action) || action == .shoot ? self : panel).addSubview(button)
+            addSubview(button)
         }
+        for action in [FactorioTouchAction.inventory, .more, .back] {
+            let button = actionButton(action)
+            menuButtons.append(button)
+            addSubview(button)
+        }
+        styleSurface(palette, radius: 24)
+        palette.isHidden = true
+        addSubview(palette)
+        groups.selectedSegmentIndex = 0
+        groups.selectedSegmentTintColor = UIColor.white.withAlphaComponent(0.16)
+        groups.setTitleTextAttributes([.foregroundColor: UIColor.white, .font: UIFont.systemFont(ofSize: 13, weight: .semibold)], for: .normal)
+        groups.accessibilityLabel = "Tool group"
+        groups.addAction(UIAction { [weak self] _ in self?.updatePalette() }, for: .valueChanged)
+        palette.contentView.addSubview(groups)
+        closeButton.setImage(UIImage(systemName: "xmark"), for: .normal)
+        closeButton.tintColor = .white
+        closeButton.accessibilityLabel = "Close tools"
+        closeButton.addAction(UIAction { [weak self] _ in self?.showPalette(false) }, for: .touchUpInside)
+        palette.contentView.addSubview(closeButton)
+        for action in Set(FactorioTouchAction.groups.flatMap { $0 }) {
+            let button = actionButton(action)
+            paletteButtons[action] = button
+            palette.contentView.addSubview(button)
+        }
+        updatePalette()
+        updateMode()
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -200,32 +277,37 @@ final class FactorioTouchControlsView: UIView {
         super.layoutSubviews()
         let layout = FactorioTouchLayout(safeBounds: bounds.inset(by: safeAreaInsets))
         if stick.frame != layout.stick { releaseHeldActions() }
+        backdrop.frame = bounds
         stick.frame = layout.stick
-        modeButton.frame = layout.mode
-        modifierLabel.frame = CGRect(x: layout.mode.maxX + 8, y: layout.mode.minY,
-            width: max(0, bounds.inset(by: safeAreaInsets).maxX - layout.mode.maxX - 76), height: 44)
+        toolbar.frame = layout.toolbar
+        utilityButtons[0].frame = CGRect(x: 4, y: 4, width: 44, height: 44)
+        mode.frame = CGRect(x: 52, y: 4, width: toolbar.bounds.width - 152, height: 44)
+        utilityButtons[1].frame = CGRect(x: toolbar.bounds.width - 96, y: 4, width: 44, height: 44)
+        utilityButtons[2].frame = CGRect(x: toolbar.bounds.width - 48, y: 4, width: 44, height: 44)
+        modifierLabel.frame = CGRect(x: layout.toolbar.minX, y: layout.toolbar.maxY + 4,
+            width: layout.toolbar.width, height: 20)
         for (action, frame) in zip(FactorioTouchAction.primary, layout.actions) { buttons[action]?.frame = frame }
-        buttons[.shoot]?.frame = layout.shoot
-        panel.frame = layout.panel
-        let gap: CGFloat = 8
-        let columns = panel.bounds.width >= 300 ? 3 : 2
-        let width = (panel.bounds.width - gap * CGFloat(columns + 1)) / CGFloat(columns)
-        for (index, action) in FactorioTouchAction.secondary.enumerated() {
-            buttons[action]?.frame = CGRect(x: gap + CGFloat(index % columns) * (width + gap),
-                y: gap + CGFloat(index / columns) * 56, width: width, height: 48)
+        for (button, frame) in zip(menuButtons, layout.menuActions) { button.frame = frame }
+        palette.frame = layout.panel
+        groups.frame = CGRect(x: 12, y: 12, width: palette.bounds.width - 72, height: 36)
+        closeButton.frame = CGRect(x: palette.bounds.width - 52, y: 8, width: 44, height: 44)
+        let radius = min(70, (palette.bounds.height - 112) / 2)
+        let center = CGPoint(x: palette.bounds.midX, y: palette.bounds.height / 2 + 20)
+        for (index, action) in FactorioTouchAction.groups[groups.selectedSegmentIndex].enumerated() {
+            let angle = CGFloat(index) * .pi / 3 - .pi / 2
+            paletteButtons[action]?.frame = CGRect(x: center.x + cos(angle) * radius - 28,
+                y: center.y + sin(angle) * radius - 28, width: 56, height: 56)
         }
-        panel.contentSize = CGSize(width: panel.bounds.width,
-            height: gap + CGFloat((FactorioTouchAction.secondary.count + columns - 1) / columns) * 56)
     }
 
     func setSelected(_ action: FactorioTouchAction, _ selected: Bool) {
-        buttons[action]?.isSelected = selected
-        buttons[action]?.backgroundColor = selected ? UIColor.systemOrange.withAlphaComponent(0.85) : UIColor.black.withAlphaComponent(0.6)
-        buttons[action]?.accessibilityTraits = selected ? [.button, .selected] : [.button]
+        buttons[action]?.active = selected
+        paletteButtons[action]?.active = selected
+        for button in menuButtons where button.action == action { button.active = selected }
         if action == .shift || action == .control {
-            modifierLabel.text = [FactorioTouchAction.shift, .control].filter { buttons[$0]?.isSelected == true }
+            modifierLabel.text = [FactorioTouchAction.shift, .control].filter { paletteButtons[$0]?.active == true }
                 .map(\.title).joined(separator: " + ")
-            modifierLabel.isHidden = modifierLabel.text?.isEmpty != false
+            modifierLabel.isHidden = modifierLabel.text?.isEmpty != false || !palette.isHidden
         }
     }
 
@@ -236,13 +318,86 @@ final class FactorioTouchControlsView: UIView {
 
     func reset() {
         releaseHeldActions()
-        panel.isHidden = true
+        showPalette(false)
         for action in [FactorioTouchAction.shift, .control, .more] { setSelected(action, false) }
+    }
+
+    private func setPrecision(_ enabled: Bool) {
+        releaseHeldActions()
+        precision = enabled
+        mode.selectedSegmentIndex = enabled ? 1 : 0
+        showPalette(false)
+        updateMode()
+        onModeChange?()
+        feedback.selectionChanged()
+    }
+
+    private func updateMode() {
+        let toolsOpen = !palette.isHidden
+        stick.isHidden = !precision || toolsOpen
+        buttons.values.forEach { $0.isHidden = !precision || toolsOpen }
+        menuButtons.forEach { $0.isHidden = precision || toolsOpen }
+        toolbar.isHidden = toolsOpen
+        modifierLabel.isHidden = modifierLabel.text?.isEmpty != false || toolsOpen
+    }
+
+    private func showPalette(_ visible: Bool) {
+        if visible { releaseHeldActions(); onAction?(.more, true) }
+        else {
+            for action in Array(heldActions) where FactorioTouchAction.groups.flatMap({ $0 }).contains(action) { release(action) }
+        }
+        palette.isHidden = !visible
+        backdrop.isHidden = !visible
+        setSelected(.more, visible)
+        palette.accessibilityViewIsModal = visible
+        updateMode()
+        if visible { UIAccessibility.post(notification: .layoutChanged, argument: groups) }
+    }
+
+    private func updatePalette() {
+        let visible = Set(FactorioTouchAction.groups[groups.selectedSegmentIndex])
+        for action in Array(heldActions) { release(action) }
+        for (action, button) in paletteButtons { button.isHidden = !visible.contains(action) }
+        setNeedsLayout()
+    }
+
+    private func actionButton(_ action: FactorioTouchAction) -> FactorioTouchActionButton {
+        let button = FactorioTouchActionButton(action: action)
+        button.accessibilityHint = action.held ? "Hold to act. Release to stop." : "Uses the default Factorio binding."
+        if [.build, .mine, .shoot].contains(action) {
+            button.onDrag = { [weak self] delta in
+                guard let self, self.heldActions.contains(action) else { return }
+                self.onAim?(delta)
+            }
+            button.accessibilityHint = "Hold to act. Drag to aim while holding. Release to stop."
+        }
+        if action.held {
+            button.addAction(UIAction { [weak self] _ in self?.press(action) }, for: .touchDown)
+            button.addAction(UIAction { [weak self] _ in self?.release(action) }, for: [.touchUpInside, .touchUpOutside, .touchCancel])
+            button.onAccessibilityActivate = { [weak self] in self?.press(action); self?.release(action) }
+            button.accessibilityCustomActions = [
+                UIAccessibilityCustomAction(name: "Hold \(action.title)") { [weak self] _ in self?.press(action); return true },
+                UIAccessibilityCustomAction(name: "Stop \(action.title)") { [weak self] _ in self?.release(action); return true }
+            ]
+        } else {
+            button.addAction(UIAction { [weak self] _ in
+                guard let self else { return }
+                self.feedback.selectionChanged()
+                if action == .more { self.showPalette(self.palette.isHidden) }
+                else {
+                    self.onAction?(action, true)
+                    if [.inventory, .map, .research, .blueprints, .back].contains(action) { self.setPrecision(false) }
+                    else if ![.shift, .control, .zoomIn, .zoomOut].contains(action) { self.showPalette(false) }
+                }
+            }, for: .touchUpInside)
+        }
+        return button
     }
 
     private func press(_ action: FactorioTouchAction) {
         guard heldActions.insert(action).inserted else { return }
         setSelected(action, true)
+        feedback.selectionChanged()
         onAction?(action, true)
     }
 
@@ -252,43 +407,139 @@ final class FactorioTouchControlsView: UIView {
         onAction?(action, false)
     }
 
-    private func configure(_ button: UIButton, title: String) {
-        button.setTitle(title, for: .normal)
-        button.setTitleColor(.white, for: .normal)
-        button.setTitleColor(.systemOrange, for: .highlighted)
-        button.setTitleColor(.white, for: [.selected, .highlighted])
-        button.titleLabel?.font = .systemFont(ofSize: 13, weight: .medium)
-        button.titleLabel?.numberOfLines = 2
-        button.titleLabel?.textAlignment = .center
-        button.backgroundColor = UIColor.black.withAlphaComponent(0.6)
-        button.layer.cornerRadius = 12
-        button.layer.borderWidth = 1
-        button.layer.borderColor = UIColor.white.withAlphaComponent(0.25).cgColor
+    private func utility(_ symbol: String, label: String, action: @escaping () -> Void) -> UIButton {
+        let button = FactorioTouchOnlyButton(type: .system)
+        button.setImage(UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .medium)), for: .normal)
+        button.tintColor = .white
+        button.accessibilityLabel = label
+        button.addAction(UIAction { _ in action() }, for: .touchUpInside)
+        return button
+    }
+
+    private func styleSurface(_ view: UIView, radius: CGFloat) {
+        view.layer.cornerRadius = radius
+        view.clipsToBounds = true
+        view.layer.borderWidth = 1
+        view.layer.borderColor = UIColor.white.withAlphaComponent(0.13).cgColor
+    }
+}
+
+private final class FactorioTouchActionButton: UIButton {
+    override var canBecomeFocused: Bool { false }
+    var onAccessibilityActivate: (() -> Void)?
+    var onDrag: ((CGPoint) -> Void)?
+    var active = false { didSet { updateAppearance() } }
+    override var isHighlighted: Bool { didSet { updateAppearance() } }
+    private let glyph = UIImageView()
+    private let caption = UILabel()
+    let action: FactorioTouchAction
+    private var lastPoint: CGPoint?
+
+    init(action: FactorioTouchAction) {
+        self.action = action
+        super.init(frame: .zero)
+        isExclusiveTouch = false
+        accessibilityLabel = action.title
+        accessibilityIdentifier = "touch-" + action.rawValue
+        glyph.image = UIImage(systemName: action.symbol)
+        glyph.contentMode = .scaleAspectFit
+        glyph.isUserInteractionEnabled = false
+        addSubview(glyph)
+        caption.text = action.caption
+        caption.textAlignment = .center
+        caption.font = .systemFont(ofSize: 11, weight: .semibold)
+        caption.textColor = .white
+        addSubview(caption)
+        layer.borderWidth = 1
+        layer.shadowColor = UIColor.black.cgColor
+        layer.shadowOpacity = 0.3
+        layer.shadowRadius = 5
+        layer.shadowOffset = CGSize(width: 0, height: 2)
+        updateAppearance()
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        layer.cornerRadius = bounds.width / 2
+        let large = action == .build
+        let small = bounds.height < 50
+        glyph.frame = CGRect(x: 10, y: large ? 9 : (small ? 4 : 7), width: bounds.width - 20,
+            height: large ? (bounds.height >= 68 ? 27 : 23) : (small ? 17 : 21))
+        caption.frame = CGRect(x: 2, y: bounds.height - 22, width: bounds.width - 4, height: 16)
+    }
+
+    override func accessibilityActivate() -> Bool {
+        if let onAccessibilityActivate { onAccessibilityActivate(); return true }
+        sendActions(for: .touchUpInside)
+        return true
+    }
+
+    override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+        lastPoint = touch.location(in: superview)
+        return super.beginTracking(touch, with: event)
+    }
+
+    override func continueTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+        let point = touch.location(in: superview)
+        if let lastPoint, onDrag != nil { onDrag?(CGPoint(x: point.x - lastPoint.x, y: point.y - lastPoint.y)) }
+        lastPoint = point
+        // A held building gesture must keep tracking after it leaves the button.
+        if onDrag != nil { return true }
+        return super.continueTracking(touch, with: event)
+    }
+
+    override func endTracking(_ touch: UITouch?, with event: UIEvent?) {
+        lastPoint = nil
+        super.endTracking(touch, with: event)
+    }
+
+    override func cancelTracking(with event: UIEvent?) {
+        lastPoint = nil
+        super.cancelTracking(with: event)
+    }
+
+    private func updateAppearance() {
+        let pressed = active || isHighlighted
+        let primary = action == .build
+        backgroundColor = pressed ? touchAmber.withAlphaComponent(0.95) : touchSurface
+        glyph.tintColor = pressed ? .black : (primary ? touchAmber : .white)
+        caption.textColor = pressed ? .black : .white
+        layer.borderColor = (pressed || primary ? touchAmber : UIColor.white.withAlphaComponent(0.22)).cgColor
+        layer.borderWidth = primary ? 2 : 1
+        accessibilityTraits = active ? [.button, .selected] : [.button]
     }
 }
 
 private final class FactorioTouchStickView: UIView {
     var onMovement: ((Set<Int32>) -> Void)?
+    private let base = UIView()
     private let knob = UIView()
-    private let label = UILabel()
+    private let caption = UILabel()
     private var activeTouch: UITouch?
+    private var origin = CGPoint.zero
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        backgroundColor = UIColor.black.withAlphaComponent(0.45)
-        layer.borderWidth = 1
-        layer.borderColor = UIColor.white.withAlphaComponent(0.25).cgColor
-        knob.backgroundColor = UIColor.white.withAlphaComponent(0.45)
+        base.isUserInteractionEnabled = false
+        base.backgroundColor = UIColor.black.withAlphaComponent(0.20)
+        base.layer.borderWidth = 1.5
+        base.layer.borderColor = UIColor.white.withAlphaComponent(0.25).cgColor
+        addSubview(base)
         knob.isUserInteractionEnabled = false
-        addSubview(knob)
-        label.text = "Move"
-        label.textColor = .white
-        label.font = .systemFont(ofSize: 13, weight: .medium)
-        label.textAlignment = .center
-        addSubview(label)
+        knob.backgroundColor = UIColor.white.withAlphaComponent(0.28)
+        knob.layer.borderWidth = 1
+        knob.layer.borderColor = UIColor.white.withAlphaComponent(0.35).cgColor
+        base.addSubview(knob)
+        caption.text = "MOVE"
+        caption.font = .systemFont(ofSize: 11, weight: .semibold)
+        caption.textColor = UIColor.white.withAlphaComponent(0.75)
+        caption.textAlignment = .center
+        knob.addSubview(caption)
         isAccessibilityElement = true
-        accessibilityLabel = "Movement stick"
-        accessibilityHint = "Drag in the direction you want to move. Release to stop."
+        accessibilityLabel = "Movement pad"
+        accessibilityHint = "Drag from anywhere on the pad. Release to stop."
         accessibilityCustomActions = [
             ("Move up", Set<Int32>([26])), ("Move down", [22]),
             ("Move left", [4]), ("Move right", [7]), ("Stop moving", [])
@@ -301,16 +552,24 @@ private final class FactorioTouchStickView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        layer.cornerRadius = bounds.width / 2
-        knob.bounds.size = CGSize(width: bounds.width * 0.38, height: bounds.height * 0.38)
-        knob.layer.cornerRadius = knob.bounds.width / 2
-        label.frame = CGRect(x: 0, y: bounds.maxY - 24, width: bounds.width, height: 20)
-        if activeTouch == nil { knob.center = CGPoint(x: bounds.midX, y: bounds.midY) }
+        base.bounds.size = CGSize(width: bounds.width - 20, height: bounds.height - 20)
+        base.layer.cornerRadius = base.bounds.width / 2
+        knob.bounds.size = CGSize(width: 44, height: 44)
+        knob.layer.cornerRadius = 22
+        caption.frame = knob.bounds
+        if activeTouch == nil { reset() }
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard activeTouch == nil, let touch = touches.first else { return }
         activeTouch = touch
+        origin = touch.location(in: self)
+        let radius = base.bounds.width / 2
+        base.center = CGPoint(x: min(max(origin.x, radius), bounds.maxX - radius),
+            y: min(max(origin.y, radius), bounds.maxY - radius))
+        base.layer.borderColor = touchAmber.cgColor
+        knob.backgroundColor = touchAmber.withAlphaComponent(0.8)
+        caption.isHidden = true
         update(touch)
     }
 
@@ -326,17 +585,21 @@ private final class FactorioTouchStickView: UIView {
 
     func reset() {
         activeTouch = nil
-        knob.center = CGPoint(x: bounds.midX, y: bounds.midY)
+        base.center = CGPoint(x: bounds.midX, y: bounds.midY)
+        base.layer.borderColor = UIColor.white.withAlphaComponent(0.25).cgColor
+        knob.backgroundColor = UIColor.white.withAlphaComponent(0.28)
+        knob.center = CGPoint(x: base.bounds.midX, y: base.bounds.midY)
+        caption.isHidden = false
         onMovement?([])
     }
 
     private func update(_ touch: UITouch) {
         let point = touch.location(in: self)
-        let delta = CGPoint(x: point.x - bounds.midX, y: point.y - bounds.midY)
-        let radius = bounds.width / 2
+        let delta = CGPoint(x: point.x - origin.x, y: point.y - origin.y)
+        let radius = base.bounds.width / 2
         let distance = max(1, hypot(delta.x, delta.y))
         let scale = min(1, (radius - knob.bounds.width / 2) / distance)
-        knob.center = CGPoint(x: bounds.midX + delta.x * scale, y: bounds.midY + delta.y * scale)
+        knob.center = CGPoint(x: base.bounds.midX + delta.x * scale, y: base.bounds.midY + delta.y * scale)
         onMovement?(FactorioTouchLayout.movement(at: delta, radius: radius))
     }
 }

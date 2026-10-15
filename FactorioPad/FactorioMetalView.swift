@@ -64,6 +64,13 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
         touchControls.onAction = { [weak self] in self?.touchAction($0, pressed: $1) }
         touchControls.onMovement = { [weak self] in self?.touchMovementChanged($0) }
         touchControls.onModeChange = { [weak self] in self?.cancelGameTouch() }
+        touchControls.onAim = { [weak self] delta in
+            guard let self, self.inputActive, !self.touchControls.isHidden, self.touchControls.precision else { return }
+            let origin = self.pointerPosition ?? FactorioControllerBridgeGetCursorPosition()
+            self.movePointer(to: CGPoint(x: origin.x + delta.x, y: origin.y + delta.y))
+        }
+        touchControls.onHide = { [weak self] in self?.toggleTouchControls() }
+        touchControls.onHelp = { [weak self] in self?.requestControls() }
         addSubview(touchControls)
         addSubview(onScreenKeyboard)
         keyboardButton.setImage(UIImage(systemName: "keyboard"), for: .normal)
@@ -202,9 +209,9 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
             touchViewportSize = bounds.size
         }
         FactorioMetalHost.setHostView(self)
-        let safe = bounds.inset(by: safeAreaInsets).insetBy(dx: 12, dy: 12)
-        keyboardButton.frame = CGRect(x: safe.maxX - 44, y: safe.minY, width: 44, height: 44)
-        touchControlsButton.frame = CGRect(x: safe.minX, y: safe.minY, width: 44, height: 44)
+        let layout = FactorioTouchLayout(safeBounds: bounds.inset(by: safeAreaInsets))
+        keyboardButton.frame = CGRect(x: layout.toolbar.midX + 4, y: layout.toolbar.minY + 4, width: 44, height: 44)
+        touchControlsButton.frame = CGRect(x: layout.toolbar.midX - 48, y: layout.toolbar.minY + 4, width: 44, height: 44)
         touchControls.frame = bounds
         let keyboardHeight = min(280, bounds.height)
         onScreenKeyboard.frame = CGRect(x: 0, y: bounds.maxY - keyboardHeight,
@@ -226,7 +233,7 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
         // SDL can create or refocus its window while an app screen is open.
         FactorioInputSetActive(inputActive)
         controllerCursor.isHidden = !inputActive || (!(hasPhysicalMouse && useRawMouse)
-            && (FactorioLoader.usesNativeController || !hasGamepad) && touchControls.isHidden)
+            && (FactorioLoader.usesNativeController || !hasGamepad) && (touchControls.isHidden || !touchControls.precision))
         controllerCursor.frame.origin = FactorioControllerBridgeGetCursorPosition()
     }
 
@@ -242,7 +249,6 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
             onScreenKeyboard.isHidden = true
             onScreenKeyboard.reset()
         }
-        keyboardButton.isHidden = (hasPhysicalKeyboard && !hasGamepad) || !onScreenKeyboard.isHidden
         updateTouchControls()
     }
 
@@ -267,7 +273,8 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
                 movePointer(to: CGPoint(x: bounds.midX, y: bounds.midY))
             }
         }
-        touchControlsButton.isHidden = !inputActive || !onScreenKeyboard.isHidden
+        touchControlsButton.isHidden = !inputActive || !onScreenKeyboard.isHidden || !hidden
+        keyboardButton.isHidden = (hasPhysicalKeyboard && !hasGamepad) || !onScreenKeyboard.isHidden || !hidden
         touchControlsButton.accessibilityLabel = hidden ? "Show touch controls" : "Hide touch controls"
         touchControlsButton.tintColor = hidden ? .white : .systemOrange
     }

@@ -123,8 +123,9 @@ struct FactorioControlsView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Label("Touch controls", systemImage: "hand.tap").font(.headline)
                         Text("Touch gameplay uses Mouse and keyboard emulation. Tap the hand button to show or hide the default layout.")
-                        Text("Start with Direct taps for menus. Switch to Precision aim to drag the pointer without clicking. Hold Build or Mine to act.")
-                        Text("Use More for extra actions. Shift and Ctrl stay on until you tap them again. Pinch to zoom in Precision aim.")
+                        Text("Use Menus to tap game windows directly. Choose Play for the movement pad and action buttons. Drag on the game to aim.")
+                        Text("Hold and drag Build, Mine, or Fire to aim while acting. Release to stop. Pinch to zoom in Play mode.")
+                        Text("Tools groups commands under Build, Items, and World. Shift and Ctrl stay on until you tap them again.")
                         Text("These controls use Factorio's default keyboard bindings. Custom bindings in Factorio can change their actions.")
                     }
                     .foregroundStyle(.secondary)
