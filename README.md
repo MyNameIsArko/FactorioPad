@@ -50,9 +50,10 @@ Hold `Build` to place or open at the pointer. Drag that button to aim while you 
 Hold and drag `Mine` or `Fire` to aim while acting. Release to stop.
 Drag from anywhere on the movement pad to walk. Pinch to zoom in `Play` mode.
 
-The control bar starts collapsed. Tap `Menus` or `Play` above the movement pad to switch modes.
-Tap the chevron beside it to expand or collapse the bar for the keyboard, guide, and hide control.
+Tap `Menus` or `Play` above the movement pad to switch modes.
 Use `Tools` to open a compact panel by the right action cluster. Choose `Build`, `Items`, or `World` for six actions.
+Choose `App` in Tools for the keyboard, control guide, and hide control.
+After hiding the controls, tap the hand button near your left thumb to show them again.
 In `Tools` → `Items`, choose `Move stack` or `Move all`, then tap an item to transfer it.
 `Move all` transfers every item of the tapped type. Tap an empty slot to transfer all items.
 The action applies to one touch. Tap its label above the movement pad to cancel it.

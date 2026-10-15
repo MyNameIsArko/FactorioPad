@@ -14,7 +14,7 @@ import CoreGraphics
         ]
         for safe in sizes {
             let layout = FactorioTouchLayout(safeBounds: safe)
-            let frames = [layout.stick, layout.toolbar, layout.compactBar] + layout.actions
+            let frames = [layout.stick, layout.modeSwitch] + layout.actions
             assert(frames.allSatisfy { safe.contains($0) }, "Controls must stay inside the safe area: \(safe)")
             assert(layout.actions.allSatisfy { $0.width >= 44 && $0.height >= 44 })
             assert(layout.panel.width <= 280 && layout.panel.height <= 184 && safe.contains(layout.panel))
@@ -37,7 +37,7 @@ import CoreGraphics
         assert(movement(CGPoint(x: 56, y: -56), 56) == [7, 26])
         assert(movement(CGPoint(x: 56, y: 0), 0).isEmpty)
         assert(Set(FactorioTouchAction.primary + FactorioTouchAction.groups.flatMap { $0 }) == Set(FactorioTouchAction.allCases))
-        assert(FactorioTouchAction.groups.allSatisfy { $0.count == 6 && Set($0).count == 6 })
+        assert(FactorioTouchAction.groups.allSatisfy { (1...6).contains($0.count) && Set($0).count == $0.count })
         assert(FactorioTouchAction.copy.key?.modifiers == 0x0040)
         assert(FactorioTouchAction.deconstruct.key?.modifiers == 0x0100)
         assert(FactorioTouchAction.transferStack.targetModifiers == 0x0001)
