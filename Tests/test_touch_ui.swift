@@ -27,22 +27,27 @@ private func testControls(_ controls: FactorioTouchControlsView) {
     }
     let mode = all.compactMap { $0 as? UISegmentedControl }.first { $0.accessibilityLabel == "Touch mode" }!
     let groups = all.compactMap { $0 as? UISegmentedControl }.first { $0.accessibilityLabel == "Tool group" }!
+    let compactMode = all.compactMap { $0 as? UIButton }.first { $0.accessibilityLabel == "Touch mode: Menus" }!
+    let barToggle = all.compactMap { $0 as? UIButton }.first { $0.accessibilityLabel == "Expand control bar" }!
     func button(_ action: FactorioTouchAction) -> UIButton {
         all.compactMap { $0 as? UIButton }.first { $0.accessibilityIdentifier == "touch-" + action.rawValue && visible($0) }!
     }
     var actions: [(FactorioTouchAction, Bool)] = []
     var aim: [CGPoint] = []
     var movement: [Set<Int32>] = []
-    var shift = false
     controls.onAction = { action, pressed in
         actions.append((action, pressed))
-        if action == .shift { shift.toggle(); controls.setSelected(.shift, shift) }
     }
     controls.onAim = { aim.append($0) }
     controls.onMovement = { movement.append($0) }
     assert(!controls.precision && !visible(all.first { $0.accessibilityIdentifier == "touch-build" }!))
-    mode.selectedSegmentIndex = 1
-    mode.sendActions(for: .valueChanged)
+    assert(!visible(mode), "The top bar must start collapsed")
+    compactMode.sendActions(for: .touchUpInside)
+    assert(controls.precision, "The compact mode button must switch modes in one tap")
+    barToggle.sendActions(for: .touchUpInside)
+    assert(visible(mode) && barToggle.accessibilityLabel == "Collapse control bar")
+    barToggle.sendActions(for: .touchUpInside)
+    assert(!visible(mode) && controls.precision, "Collapsing the bar must keep gameplay controls active")
     controls.layoutIfNeeded()
     let pad = all.first { $0.accessibilityLabel == "Movement pad" }!
     let padTouch = TestTouch()
@@ -75,12 +80,20 @@ private func testControls(_ controls: FactorioTouchControlsView) {
     let openingTools = actions.suffix(2)
     assert(openingTools.first!.0 == .build && !openingTools.first!.1 && openingTools.last!.0 == .more && !visible(build))
     assert(visible(groups) && all.filter { $0.accessibilityIdentifier?.hasPrefix("touch-") == true && visible($0) }.count == 6)
+    if !pad.frame.intersects(groups.superview!.superview!.frame) { assert(visible(pad)) }
     groups.selectedSegmentIndex = 1
     groups.sendActions(for: .valueChanged)
     controls.layoutIfNeeded()
-    button(.shift).sendActions(for: .touchUpInside)
-    all.compactMap { $0 as? UIButton }.first { $0.accessibilityLabel == "Close tools" }!.sendActions(for: .touchUpInside)
-    assert(all.compactMap { $0 as? UILabel }.contains { $0.text == "Shift" && visible($0) })
+    button(.transferStack).sendActions(for: .touchUpInside)
+    assert(!controls.precision && !visible(groups) && controls.targetAction == .transferStack)
+    assert(compactMode.currentTitle == "Move stack\nTap item" && compactMode.accessibilityLabel == "Cancel Move stack")
+    controls.clearTargetAction()
+    assert(controls.targetAction == nil && compactMode.currentTitle == "Menus")
+    button(.more).sendActions(for: .touchUpInside)
+    button(.transferAll).sendActions(for: .touchUpInside)
+    assert(controls.targetAction == .transferAll)
+    compactMode.sendActions(for: .touchUpInside)
+    assert(controls.targetAction == nil && !controls.precision, "Cancel must clear the target without switching modes")
     button(.inventory).sendActions(for: .touchUpInside)
     assert(!controls.precision && !visible(build), "Inventory must return to direct touch with gameplay controls hidden")
     mode.selectedSegmentIndex = 1
@@ -88,6 +101,10 @@ private func testControls(_ controls: FactorioTouchControlsView) {
     build.sendActions(for: .touchDown)
     controls.reset()
     assert(actions.last!.0 == .build && !actions.last!.1)
+    button(.more).sendActions(for: .touchUpInside)
+    button(.transferAll).sendActions(for: .touchUpInside)
+    controls.reset()
+    assert(controls.targetAction == nil && !visible(mode), "Suspension must clear pending actions and keep the bar collapsed")
     controls.onAction = nil
     controls.onAim = nil
     controls.onMovement = nil
@@ -128,7 +145,7 @@ private final class PreviewController: UIViewController {
         mode.selectedSegmentIndex = CommandLine.arguments.contains("--menus") ? 0 : 1
         mode.sendActions(for: .valueChanged)
         let groups = all.compactMap { $0 as? UISegmentedControl }.first { $0.accessibilityLabel == "Tool group" }!
-        groups.selectedSegmentIndex = 0
+        groups.selectedSegmentIndex = CommandLine.arguments.contains("--items") ? 1 : 0
         groups.sendActions(for: .valueChanged)
         if CommandLine.arguments.contains("--tools") {
             all.compactMap { $0 as? UIButton }.first {

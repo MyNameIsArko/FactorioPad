@@ -38,7 +38,7 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
     private var touchKeys = Set<Int32>()
     private var touchMovement = Set<Int32>()
     private var touchActions = Set<FactorioTouchAction>()
-    private var touchModifiers: UInt16 = 0
+    private var directTouchModifiers: UInt16 = 0
     private var directTouchHeld = false
     private var legacyTouchHeld = false
     private var pinchScale: CGFloat = 1
@@ -314,18 +314,14 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
             if action == .build || action == .mine {
                 if pressed { self.touchActions.insert(action) } else { self.touchActions.remove(action) }
                 self.updateTouchMouseButtons()
-            } else if action == .shift || action == .control {
-                self.touchModifiers ^= action == .shift ? 0x0001 : 0x0040
-                self.setTouchModifiers(self.touchModifiers)
-                self.touchControls.setSelected(action, self.touchModifiers & (action == .shift ? 0x0001 : 0x0040) != 0)
             } else if let key = action.key {
                 if action.held {
                     self.setTouchKey(key.code, pressed: pressed, symbol: key.symbol)
                 } else if pressed {
-                    self.setTouchModifiers(self.touchModifiers | key.modifiers)
+                    self.setTouchModifiers(self.directTouchModifiers | key.modifiers)
                     self.setTouchKey(key.code, pressed: true, symbol: key.symbol)
                     self.setTouchKey(key.code, pressed: false, symbol: key.symbol)
-                    self.setTouchModifiers(self.touchModifiers)
+                    self.setTouchModifiers(self.directTouchModifiers)
                 }
             } else if pressed && (action == .zoomIn || action == .zoomOut) {
                 FactorioMouseWheel(0, action == .zoomIn ? 1 : -1)
@@ -341,7 +337,7 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
             self.directTouchHeld = false
             self.touchActions.removeAll()
             self.updateTouchMouseButtons()
-            self.touchModifiers = 0
+            self.directTouchModifiers = 0
             self.setTouchModifiers(0)
             for code in Array(self.touchKeys) { self.setTouchKey(code, pressed: false) }
             self.touchMovement.removeAll()
@@ -353,8 +349,13 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
         legacyTouchHeld = false
         primaryTouch = nil
         lastAimPoint = nil
-        directTouchHeld = false
-        updateTouchMouseButtons()
+        FactorioInputPerform {
+            self.directTouchHeld = false
+            self.updateTouchMouseButtons()
+            self.directTouchModifiers = 0
+            self.setTouchModifiers(0)
+        }
+        touchControls.clearTargetAction()
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
@@ -589,8 +590,12 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
             lastAimPoint = touch.location(in: self)
             if !touchControls.precision {
                 movePointer(to: touch.location(in: self))
-                directTouchHeld = true
-                updateTouchMouseButtons()
+                FactorioInputPerform {
+                    self.directTouchModifiers = self.touchControls.targetAction?.targetModifiers ?? 0
+                    self.setTouchModifiers(self.directTouchModifiers)
+                    self.directTouchHeld = true
+                    self.updateTouchMouseButtons()
+                }
             }
         } else {
             legacyTouchHeld = true
@@ -605,6 +610,8 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
             return
         }
         guard inputActive, let primaryTouch, touches.contains(primaryTouch) else { return }
+        // A transfer targets one stack even if the finger drifts before release.
+        if directTouchModifiers != 0 { return }
         for touch in event?.coalescedTouches(for: primaryTouch) ?? [primaryTouch] {
             if !touchControls.isHidden {
                 let point = touch.location(in: self)
@@ -625,9 +632,14 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
         }
         guard inputActive, let primaryTouch, touches.contains(primaryTouch) else { return }
         if !touchControls.isHidden {
-            if !touchControls.precision { movePointer(to: primaryTouch.location(in: self)) }
-            directTouchHeld = false
-            updateTouchMouseButtons()
+            if !touchControls.precision && directTouchModifiers == 0 { movePointer(to: primaryTouch.location(in: self)) }
+            FactorioInputPerform {
+                self.directTouchHeld = false
+                self.updateTouchMouseButtons()
+                self.directTouchModifiers = 0
+                self.setTouchModifiers(0)
+            }
+            touchControls.clearTargetAction()
             lastAimPoint = nil
         } else {
             updateTouch(primaryTouch, send: FactorioTouchEnd)

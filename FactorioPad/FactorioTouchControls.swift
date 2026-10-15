@@ -3,13 +3,13 @@ import CoreGraphics
 
 enum FactorioTouchAction: String, CaseIterable {
     case build, mine, rotate, pick, inventory, more
-    case shift, control, shoot, pickup, map, research, alt, vehicle
+    case transferStack, transferAll, shoot, pickup, map, research, alt, vehicle
     case copy, paste, undo, blueprints, deconstruct, upgrade, zoomIn, zoomOut, back, keyboard
 
     static let primary: [Self] = [.build, .mine, .rotate, .pick, .inventory, .shoot, .more]
     static let groups: [[Self]] = [
         [.copy, .paste, .undo, .blueprints, .deconstruct, .upgrade],
-        [.shift, .control, .pickup, .inventory, .back, .keyboard],
+        [.transferStack, .transferAll, .pickup, .inventory, .back, .keyboard],
         [.map, .research, .alt, .vehicle, .zoomIn, .zoomOut]
     ]
 
@@ -21,8 +21,8 @@ enum FactorioTouchAction: String, CaseIterable {
         case .pick: return "Pick / clear"
         case .inventory: return "Inventory"
         case .more: return "More"
-        case .shift: return "Shift"
-        case .control: return "Ctrl"
+        case .transferStack: return "Move stack"
+        case .transferAll: return "Move all"
         case .shoot: return "Shoot"
         case .pickup: return "Pick up"
         case .map: return "Map"
@@ -43,6 +43,14 @@ enum FactorioTouchAction: String, CaseIterable {
     }
 
     var held: Bool { [.build, .mine, .shoot, .pickup].contains(self) }
+
+    var targetModifiers: UInt16? {
+        switch self {
+        case .transferStack: return 0x0001
+        case .transferAll: return 0x0040
+        default: return nil
+        }
+    }
 
     // shortcut: default Factorio bindings only, add mapping support with the layout editor.
     var key: (code: Int32, symbol: Int32, modifiers: UInt16)? {
@@ -72,6 +80,7 @@ struct FactorioTouchLayout {
     let stick: CGRect
     let actions: [CGRect]
     let toolbar: CGRect
+    let compactBar: CGRect
     let panel: CGRect
     let menuActions: [CGRect]
     let edgeInset: CGFloat
@@ -101,10 +110,9 @@ struct FactorioTouchLayout {
         let toolbarWidth = min(320, safeBounds.width - edgeInset * 2)
         toolbar = CGRect(x: safeBounds.midX - toolbarWidth / 2,
             y: safeBounds.minY + (compact ? 20 : 28), width: toolbarWidth, height: 52)
-        let panelWidth = min(352, safeBounds.width - 32)
-        let panelHeight = min(276, safeBounds.height - 24)
-        panel = CGRect(x: safeBounds.midX - panelWidth / 2, y: safeBounds.midY - panelHeight / 2,
-            width: panelWidth, height: panelHeight)
+        compactBar = CGRect(x: stick.minX, y: stick.minY - 52, width: 128, height: 44)
+        panel = CGRect(x: safeBounds.maxX - edgeInset - 272,
+            y: safeBounds.maxY - bottom - 184, width: 272, height: 184)
         menuActions = (0..<3).map { index in
             CGRect(x: safeBounds.maxX - edgeInset - 52 - CGFloat(2 - index) * 60,
                 y: safeBounds.maxY - bottom - 52, width: 52, height: 52)
@@ -142,8 +150,8 @@ private extension FactorioTouchAction {
         case .pick: return "eyedropper"
         case .inventory: return "shippingbox.fill"
         case .more: return "square.grid.2x2.fill"
-        case .shift: return "shift"
-        case .control: return "control"
+        case .transferStack: return "arrow.right.square"
+        case .transferAll: return "arrow.right.square.fill"
         case .shoot: return "scope"
         case .pickup: return "hand.raised.fingers.spread.fill"
         case .map: return "map.fill"
@@ -188,10 +196,14 @@ final class FactorioTouchControlsView: UIView {
     var onHide: (() -> Void)?
     var onHelp: (() -> Void)?
     private(set) var precision = false
+    private(set) var targetAction: FactorioTouchAction?
     private let stick = FactorioTouchStickView()
     private let toolbar = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialDark))
     private let mode = FactorioTouchSegments(items: ["Menus", "Play"])
-    private let modifierLabel = UILabel()
+    private let compactBar = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialDark))
+    private let modeButton = FactorioTouchOnlyButton(type: .system)
+    private let barButton = FactorioTouchOnlyButton(type: .system)
+    private var barExpanded = false
     private let palette = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterialDark))
     private let groups = FactorioTouchSegments(items: ["Build", "Items", "World"])
     private let closeButton = FactorioTouchOnlyButton(type: .custom)
@@ -207,7 +219,6 @@ final class FactorioTouchControlsView: UIView {
         super.init(frame: frame)
         overrideUserInterfaceStyle = .dark
         isMultipleTouchEnabled = true
-        backdrop.backgroundColor = UIColor.black.withAlphaComponent(0.25)
         backdrop.isHidden = true
         backdrop.addAction(UIAction { [weak self] _ in self?.showPalette(false) }, for: .touchUpInside)
         addSubview(backdrop)
@@ -228,11 +239,23 @@ final class FactorioTouchControlsView: UIView {
             utility("questionmark.circle", label: "Control guide") { [weak self] in self?.onHelp?() }
         ]
         utilityButtons.forEach { toolbar.contentView.addSubview($0) }
-        modifierLabel.textColor = touchAmber
-        modifierLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-        modifierLabel.textAlignment = .center
-        modifierLabel.isHidden = true
-        addSubview(modifierLabel)
+        styleSurface(compactBar, radius: 22)
+        addSubview(compactBar)
+        modeButton.titleLabel?.font = .systemFont(ofSize: 12, weight: .semibold)
+        modeButton.tintColor = .white
+        modeButton.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            if self.targetAction != nil { self.onModeChange?(); self.clearTargetAction() }
+            else { self.setPrecision(!self.precision) }
+        }, for: .touchUpInside)
+        compactBar.contentView.addSubview(modeButton)
+        barButton.tintColor = .white
+        barButton.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            self.barExpanded.toggle()
+            self.updateMode()
+        }, for: .touchUpInside)
+        compactBar.contentView.addSubview(barButton)
         for action in FactorioTouchAction.primary {
             let button = actionButton(action)
             buttons[action] = button
@@ -243,7 +266,7 @@ final class FactorioTouchControlsView: UIView {
             menuButtons.append(button)
             addSubview(button)
         }
-        styleSurface(palette, radius: 24)
+        styleSurface(palette, radius: 18)
         palette.isHidden = true
         addSubview(palette)
         groups.selectedSegmentIndex = 0
@@ -259,6 +282,7 @@ final class FactorioTouchControlsView: UIView {
         palette.contentView.addSubview(closeButton)
         for action in Set(FactorioTouchAction.groups.flatMap { $0 }) {
             let button = actionButton(action)
+            button.compact = true
             paletteButtons[action] = button
             palette.contentView.addSubview(button)
         }
@@ -284,31 +308,32 @@ final class FactorioTouchControlsView: UIView {
         mode.frame = CGRect(x: 52, y: 4, width: toolbar.bounds.width - 152, height: 44)
         utilityButtons[1].frame = CGRect(x: toolbar.bounds.width - 96, y: 4, width: 44, height: 44)
         utilityButtons[2].frame = CGRect(x: toolbar.bounds.width - 48, y: 4, width: 44, height: 44)
-        modifierLabel.frame = CGRect(x: layout.toolbar.minX, y: layout.toolbar.maxY + 4,
-            width: layout.toolbar.width, height: 20)
+        compactBar.frame = layout.compactBar
+        modeButton.frame = CGRect(x: 0, y: 0, width: 84, height: 44)
+        barButton.frame = CGRect(x: 84, y: 0, width: 44, height: 44)
         for (action, frame) in zip(FactorioTouchAction.primary, layout.actions) { buttons[action]?.frame = frame }
         for (button, frame) in zip(menuButtons, layout.menuActions) { button.frame = frame }
         palette.frame = layout.panel
-        groups.frame = CGRect(x: 12, y: 12, width: palette.bounds.width - 72, height: 36)
-        closeButton.frame = CGRect(x: palette.bounds.width - 52, y: 8, width: 44, height: 44)
-        let radius = min(70, (palette.bounds.height - 112) / 2)
-        let center = CGPoint(x: palette.bounds.midX, y: palette.bounds.height / 2 + 20)
+        groups.frame = CGRect(x: 8, y: 8, width: palette.bounds.width - 60, height: 44)
+        closeButton.frame = CGRect(x: palette.bounds.width - 48, y: 8, width: 44, height: 44)
+        let column = (palette.bounds.width - 16) / 3
         for (index, action) in FactorioTouchAction.groups[groups.selectedSegmentIndex].enumerated() {
-            let angle = CGFloat(index) * .pi / 3 - .pi / 2
-            paletteButtons[action]?.frame = CGRect(x: center.x + cos(angle) * radius - 28,
-                y: center.y + sin(angle) * radius - 28, width: 56, height: 56)
+            paletteButtons[action]?.frame = CGRect(x: 8 + CGFloat(index % 3) * column,
+                y: 64 + CGFloat(index / 3) * 56, width: column - 4, height: 52)
         }
+        updateMode()
     }
 
     func setSelected(_ action: FactorioTouchAction, _ selected: Bool) {
         buttons[action]?.active = selected
         paletteButtons[action]?.active = selected
         for button in menuButtons where button.action == action { button.active = selected }
-        if action == .shift || action == .control {
-            modifierLabel.text = [FactorioTouchAction.shift, .control].filter { paletteButtons[$0]?.active == true }
-                .map(\.title).joined(separator: " + ")
-            modifierLabel.isHidden = modifierLabel.text?.isEmpty != false || !palette.isHidden
-        }
+    }
+
+    func clearTargetAction() {
+        if let targetAction { setSelected(targetAction, false) }
+        targetAction = nil
+        updateMode()
     }
 
     func releaseHeldActions() {
@@ -319,11 +344,13 @@ final class FactorioTouchControlsView: UIView {
     func reset() {
         releaseHeldActions()
         showPalette(false)
-        for action in [FactorioTouchAction.shift, .control, .more] { setSelected(action, false) }
+        clearTargetAction()
+        setSelected(.more, false)
     }
 
     private func setPrecision(_ enabled: Bool) {
         releaseHeldActions()
+        clearTargetAction()
         precision = enabled
         mode.selectedSegmentIndex = enabled ? 1 : 0
         showPalette(false)
@@ -334,22 +361,29 @@ final class FactorioTouchControlsView: UIView {
 
     private func updateMode() {
         let toolsOpen = !palette.isHidden
-        stick.isHidden = !precision || toolsOpen
+        stick.isHidden = !precision || (toolsOpen && stick.frame.intersects(palette.frame))
         buttons.values.forEach { $0.isHidden = !precision || toolsOpen }
         menuButtons.forEach { $0.isHidden = precision || toolsOpen }
-        toolbar.isHidden = toolsOpen
-        modifierLabel.isHidden = modifierLabel.text?.isEmpty != false || toolsOpen
+        toolbar.isHidden = toolsOpen || !barExpanded
+        compactBar.isHidden = toolsOpen
+        modeButton.titleLabel?.numberOfLines = targetAction == nil ? 1 : 2
+        modeButton.titleLabel?.textAlignment = .center
+        modeButton.setTitle(targetAction.map { "\($0.title)\nTap item" } ?? (precision ? "Play" : "Menus"), for: .normal)
+        modeButton.accessibilityLabel = targetAction.map { "Cancel \($0.title)" } ?? "Touch mode: \(precision ? "Play" : "Menus")"
+        modeButton.accessibilityHint = targetAction != nil ? "Tap an item to transfer it once, or tap here to cancel." : "Tap to switch between Menus and Play."
+        modeButton.tintColor = targetAction != nil ? touchAmber : .white
+        barButton.setImage(UIImage(systemName: barExpanded ? "chevron.down" : "chevron.up"), for: .normal)
+        barButton.accessibilityLabel = barExpanded ? "Collapse control bar" : "Expand control bar"
     }
 
     private func showPalette(_ visible: Bool) {
-        if visible { releaseHeldActions(); onAction?(.more, true) }
+        if visible { releaseHeldActions(); clearTargetAction(); onAction?(.more, true) }
         else {
             for action in Array(heldActions) where FactorioTouchAction.groups.flatMap({ $0 }).contains(action) { release(action) }
         }
         palette.isHidden = !visible
         backdrop.isHidden = !visible
         setSelected(.more, visible)
-        palette.accessibilityViewIsModal = visible
         updateMode()
         if visible { UIAccessibility.post(notification: .layoutChanged, argument: groups) }
     }
@@ -364,6 +398,9 @@ final class FactorioTouchControlsView: UIView {
     private func actionButton(_ action: FactorioTouchAction) -> FactorioTouchActionButton {
         let button = FactorioTouchActionButton(action: action)
         button.accessibilityHint = action.held ? "Hold to act. Release to stop." : "Uses the default Factorio binding."
+        if action.targetModifiers != nil {
+            button.accessibilityHint = action == .transferStack ? "Then tap a stack to move it to the other inventory." : "Then tap an item to move all items of its type. An empty slot moves all items."
+        }
         if [.build, .mine, .shoot].contains(action) {
             button.onDrag = { [weak self] delta in
                 guard let self, self.heldActions.contains(action) else { return }
@@ -386,8 +423,14 @@ final class FactorioTouchControlsView: UIView {
                 if action == .more { self.showPalette(self.palette.isHidden) }
                 else {
                     self.onAction?(action, true)
-                    if [.inventory, .map, .research, .blueprints, .back].contains(action) { self.setPrecision(false) }
-                    else if ![.shift, .control, .zoomIn, .zoomOut].contains(action) { self.showPalette(false) }
+                    if action.targetModifiers != nil {
+                        self.setPrecision(false)
+                        self.targetAction = action
+                        self.setSelected(action, true)
+                        self.updateMode()
+                        UIAccessibility.post(notification: .announcement, argument: "\(action.title). Tap an item. Tap the mode button to cancel.")
+                    } else if [.inventory, .map, .research, .blueprints, .back].contains(action) { self.setPrecision(false) }
+                    else if ![.zoomIn, .zoomOut].contains(action) { self.showPalette(false) }
                 }
             }, for: .touchUpInside)
         }
@@ -429,6 +472,7 @@ private final class FactorioTouchActionButton: UIButton {
     var onAccessibilityActivate: (() -> Void)?
     var onDrag: ((CGPoint) -> Void)?
     var active = false { didSet { updateAppearance() } }
+    var compact = false
     override var isHighlighted: Bool { didSet { updateAppearance() } }
     private let glyph = UIImageView()
     private let caption = UILabel()
@@ -462,7 +506,7 @@ private final class FactorioTouchActionButton: UIButton {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        layer.cornerRadius = bounds.width / 2
+        layer.cornerRadius = compact ? 12 : bounds.width / 2
         let large = action == .build
         let small = bounds.height < 50
         glyph.frame = CGRect(x: 10, y: large ? 9 : (small ? 4 : 7), width: bounds.width - 20,

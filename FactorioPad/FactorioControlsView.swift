@@ -125,7 +125,9 @@ struct FactorioControlsView: View {
                         Text("Touch gameplay uses Mouse and keyboard emulation. Tap the hand button to show or hide the default layout.")
                         Text("Use Menus to tap game windows directly. Choose Play for the movement pad and action buttons. Drag on the game to aim.")
                         Text("Hold and drag Build, Mine, or Fire to aim while acting. Release to stop. Pinch to zoom in Play mode.")
-                        Text("Tools groups commands under Build, Items, and World. Shift and Ctrl stay on until you tap them again.")
+                        Text("Tap Menus or Play above the movement pad to switch modes. Tap the chevron to expand or collapse the control bar.")
+                        Text("Tools opens a compact panel beside your right thumb. Choose Build, Items, or World for actions.")
+                        Text("In Tools → Items, choose Move stack or Move all, then tap an item. Move all transfers every item of that type. An empty slot transfers all items. Tap the action label to cancel.")
                         Text("These controls use Factorio's default keyboard bindings. Custom bindings in Factorio can change their actions.")
                     }
                     .foregroundStyle(.secondary)

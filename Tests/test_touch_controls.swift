@@ -14,10 +14,11 @@ import CoreGraphics
         ]
         for safe in sizes {
             let layout = FactorioTouchLayout(safeBounds: safe)
-            let frames = [layout.stick, layout.toolbar] + layout.actions
+            let frames = [layout.stick, layout.toolbar, layout.compactBar] + layout.actions
             assert(frames.allSatisfy { safe.contains($0) }, "Controls must stay inside the safe area: \(safe)")
             assert(layout.actions.allSatisfy { $0.width >= 44 && $0.height >= 44 })
-            assert(layout.panel.width >= 280 && safe.contains(layout.panel))
+            assert(layout.panel.width <= 280 && layout.panel.height <= 184 && safe.contains(layout.panel))
+            assert(layout.panel.maxX == safe.maxX - layout.edgeInset)
             assert(layout.stick.minX - safe.minX >= layout.edgeInset)
             assert(safe.maxX - layout.actions.map(\.maxX).max()! >= layout.edgeInset)
             assert(safe.maxY - layout.actions.map(\.maxY).max()! >= 24)
@@ -39,6 +40,9 @@ import CoreGraphics
         assert(FactorioTouchAction.groups.allSatisfy { $0.count == 6 && Set($0).count == 6 })
         assert(FactorioTouchAction.copy.key?.modifiers == 0x0040)
         assert(FactorioTouchAction.deconstruct.key?.modifiers == 0x0100)
+        assert(FactorioTouchAction.transferStack.targetModifiers == 0x0001)
+        assert(FactorioTouchAction.transferAll.targetModifiers == 0x0040)
+        assert(FactorioTouchAction.allCases.filter { $0.targetModifiers != nil } == [.transferStack, .transferAll])
         print("Factorio touch layout, movement, and shortcut tests passed.")
     }
 }
