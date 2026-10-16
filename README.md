@@ -23,6 +23,7 @@ Wait for the import progress bar to finish. FactorioPad keeps its own copy for l
 After import, you can remove the original folder.
 Before you press `Play`, choose a mode from the `Controls` and `Graphics` dropdowns.
 `Low (less memory)` reduces texture detail and disables high-quality animations and shadows. The app remembers both choices.
+Texture compression runs on the CPU. `High` retains high-quality textures, animations, and shadows.
 Save sharing is optional. Choose `Play without sync` to start without it.
 
 Keep your generated IPA private because it contains your Factorio executable.

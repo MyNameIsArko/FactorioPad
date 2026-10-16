@@ -382,7 +382,10 @@ static NSString *FactorioConfigureGraphics(NSString *config, BOOL lowGraphics)
     return FactorioApplyConfigSection(config, @"[graphics]", @[
         lowGraphics ? @"graphics-quality=medium" : @"graphics-quality=high",
         lowGraphics ? @"high-quality-animations=false" : @"high-quality-animations=true",
-        lowGraphics ? @"high-quality-shadows=false" : @"high-quality-shadows=true"
+        lowGraphics ? @"high-quality-shadows=false" : @"high-quality-shadows=true",
+        // First-load Metal shader compilation can exceed the iOS memory limit.
+        @"gpu-accelerated-compression=false",
+        @"gpu-accelerated-mipmap-compression=false"
     ], YES, YES);
 }
 
@@ -657,6 +660,7 @@ static NSString *FactorioPrepareWritableData(NSString *readDataPath)
     BOOL lowGraphics = [NSUserDefaults.standardUserDefaults boolForKey:@"FactorioLowGraphics"];
     config = FactorioConfigureGraphics(config, lowGraphics);
     FactorioLog(lowGraphics ? @"Graphics: low (less memory)" : @"Graphics: high");
+    FactorioLog(@"Texture compression: CPU (avoids first-load Metal compression shaders)");
 
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
     BOOL compressedTextures = device.supportsBCTextureCompression;
@@ -665,8 +669,7 @@ static NSString *FactorioPrepareWritableData(NSString *readDataPath)
         device.name ?: @"unavailable", compressedTextures ? @"supported" : @"unsupported"]);
     if (!compressedTextures) {
         config = FactorioApplyConfigSection(config, @"[graphics]",
-            @[@"texture-compression-level=none", @"gpu-accelerated-compression=false",
-              @"gpu-accelerated-mipmap-compression=false"], YES, YES);
+            @[@"texture-compression-level=none"], YES, YES);
         FactorioLog(@"Disabled texture compression for this GPU");
     }
 

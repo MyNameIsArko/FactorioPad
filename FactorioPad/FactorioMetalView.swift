@@ -302,7 +302,8 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
     }
 
     private func updateTouchMouseButtons() {
-        let point = pointerPosition ?? FactorioControllerBridgeGetCursorPosition()
+        // This runs under the input lock, so it must not wait for the controller queue.
+        let point = pointerPosition ?? CGPoint(x: bounds.midX, y: bounds.midY)
         FactorioTouchMouseButton(1, directTouchHeld || touchActions.contains(.build), Int32(point.x.rounded()), Int32(point.y.rounded()))
         FactorioTouchMouseButton(3, touchActions.contains(.mine), Int32(point.x.rounded()), Int32(point.y.rounded()))
     }

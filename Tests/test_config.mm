@@ -70,6 +70,7 @@ int main(void)
         NSCAssert([FactorioUpdateConfigPaths(customGraphics, @"/new/read", @"/new/write") hasPrefix:customGraphics],
             @"saved graphics preferences must not be replaced by new defaults");
         for (NSString *config in @[defaults,
+            @"[graphics]\ngpu-accelerated-compression=true\ngpu-accelerated-mipmap-compression=true\ntexture-compression-level=high-quality\n",
             @"[Graphics]\n graphics-quality = high \n high-quality-animations = true \n high-quality-shadows = true \ntexture-compression-level=none\ngpu-accelerated-compression=false\n[interface]\ncustom-ui-scale=1.25\n",
             @"[interface]\ncustom-ui-scale=1.25\n"]) {
             NSString *low = FactorioConfigureGraphics(config, YES);
@@ -93,6 +94,17 @@ int main(void)
                 @"switching back to high graphics must restore all preset values");
             NSCAssert([FactorioConfigureGraphics(high, NO) isEqualToString:high],
                 @"high graphics must remain stable across launches");
+            for (NSString *preset in @[low, high]) {
+                NSCAssert([preset containsString:@"gpu-accelerated-compression=false"] &&
+                    [preset containsString:@"gpu-accelerated-mipmap-compression=false"] &&
+                    ![preset containsString:@"gpu-accelerated-compression=true"] &&
+                    ![preset containsString:@"gpu-accelerated-mipmap-compression=true"],
+                    @"both presets must disable GPU compression for first-load memory safety");
+                if ([config containsString:@"texture-compression-level=high-quality"]) {
+                    NSCAssert([preset containsString:@"texture-compression-level=high-quality"],
+                        @"CPU compression must retain high-quality compressed textures");
+                }
+            }
             for (NSString *setting in @[@"custom-ui-scale=1.25", @"texture-compression-level=none", @"gpu-accelerated-compression=false"]) {
                 if ([config containsString:setting]) NSCAssert([low containsString:setting] && [high containsString:setting],
                     @"graphics presets must preserve unrelated preferences and GPU compression safeguards");
@@ -104,9 +116,8 @@ int main(void)
             @"[graphics]\nhigh-quality-animations=false\n[interface]\ncustom-ui-scale=1.25\n",
             @"[interface]\ncustom-ui-scale=1.25\n"
         ]) {
-            NSString *safe = FactorioApplyConfigSection(graphics, @"[graphics]",
-                @[@"texture-compression-level=none", @"gpu-accelerated-compression=false",
-                  @"gpu-accelerated-mipmap-compression=false"], YES, YES);
+            NSString *safe = FactorioApplyConfigSection(FactorioConfigureGraphics(graphics, NO), @"[graphics]",
+                @[@"texture-compression-level=none"], YES, YES);
             NSCAssert([safe containsString:@"texture-compression-level=none"] &&
                 [safe containsString:@"gpu-accelerated-compression=false"] &&
                 [safe containsString:@"gpu-accelerated-mipmap-compression=false"] &&
@@ -116,9 +127,8 @@ int main(void)
                 ![safe containsString:@"gpu-accelerated-mipmap-compression=true"],
                 @"unsupported GPUs must disable compression in existing and new configurations");
             NSCAssert([safe containsString:@"custom-ui-scale=1.25"], @"the GPU fallback must preserve unrelated preferences");
-            NSCAssert([FactorioApplyConfigSection(safe, @"[graphics]",
-                @[@"texture-compression-level=none", @"gpu-accelerated-compression=false",
-                  @"gpu-accelerated-mipmap-compression=false"], YES, YES) isEqualToString:safe], @"the fallback must survive repeated launches");
+            NSCAssert([FactorioApplyConfigSection(FactorioConfigureGraphics(safe, NO), @"[graphics]",
+                @[@"texture-compression-level=none"], YES, YES) isEqualToString:safe], @"the fallback must survive repeated launches");
         }
         NSArray<NSString *> *examples = @[
             @"[path]\nread-data=/old\nwrite-data=/old-write\n[graphics]\nquality=high\n",
