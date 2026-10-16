@@ -144,7 +144,7 @@ struct FactorioControlsView: View {
                             .foregroundStyle(.secondary)
                         Text("Connect a controller before starting the game. Open Settings → Controls in Factorio to select controller input or change its bindings.")
                             .foregroundStyle(.secondary)
-                        Text("Tap the keyboard button to type. Touch, physical keyboard, and mouse input remain available.")
+                        Text("Tap the keyboard button at the bottom right to type. Touch, physical keyboard, and mouse input remain available.")
                             .foregroundStyle(.secondary)
                     } else {
                         Text("Hold LB (Shift) or RB (Ctrl) before the other button. In an inventory, point at the stack you want to transfer.")

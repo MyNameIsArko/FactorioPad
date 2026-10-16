@@ -40,7 +40,7 @@ Keep your generated IPA private because it contains your Factorio executable.
 ## Play with touch controls
 
 Choose `Mouse and keyboard emulation` before you press `Play`.
-The hand button and touch gameplay overlay are unavailable in `Factorio native controls` mode. The keyboard button remains available for typing.
+The hand button and touch gameplay overlay are unavailable in `Factorio native controls` mode. The keyboard button stays at the bottom right for typing.
 The default touch layout appears when no gamepad, keyboard, or mouse is connected.
 Tap the hand button to show or hide it. The app remembers that choice.
 

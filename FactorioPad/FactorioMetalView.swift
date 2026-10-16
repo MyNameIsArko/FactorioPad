@@ -210,7 +210,6 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
         }
         FactorioMetalHost.setHostView(self)
         let layout = FactorioTouchLayout(safeBounds: bounds.inset(by: safeAreaInsets))
-        keyboardButton.frame = CGRect(x: layout.modeSwitch.midX + 4, y: layout.modeSwitch.minY, width: 44, height: 44)
         touchControlsButton.frame = CGRect(x: layout.modeSwitch.midX - 48, y: layout.modeSwitch.minY, width: 44, height: 44)
         touchControls.frame = bounds
         let keyboardHeight = min(280, bounds.height)
@@ -224,6 +223,9 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
             FactorioLoader.start(withWindowSize: bounds.size)
             updateTouchControls()
         }
+        keyboardButton.frame = FactorioLoader.usesNativeController
+            ? FactorioTouchLayout.nativeKeyboardFrame(in: bounds)
+            : CGRect(x: layout.modeSwitch.midX + 4, y: layout.modeSwitch.minY, width: 44, height: 44)
         FactorioControllerBridgeSetViewportSize(bounds.width, bounds.height)
         if !touchControls.isHidden && pointerPosition == nil { movePointer(to: CGPoint(x: bounds.midX, y: bounds.midY)) }
         FactorioTouchUpdateWindowSize()

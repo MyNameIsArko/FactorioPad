@@ -28,6 +28,15 @@ import CoreGraphics
             }
         }
         let movement = FactorioTouchLayout.movement
+        for viewport in [CGRect(x: 0, y: 0, width: 568, height: 320),
+            CGRect(x: 0, y: 0, width: 852, height: 393),
+            CGRect(x: 0, y: 0, width: 1133, height: 744)] {
+            let keyboard = FactorioTouchLayout.nativeKeyboardFrame(in: viewport)
+            assert(viewport.contains(keyboard) && keyboard.size == CGSize(width: 44, height: 44))
+            assert(keyboard.minX > viewport.midX && keyboard.minY > viewport.midY)
+            assert(abs((viewport.maxX - keyboard.maxX) - (viewport.maxY - keyboard.maxY)) < 0.001,
+                "The native keyboard button must use matching bottom and right edge gaps")
+        }
         assert(movement(.zero, 56).isEmpty)
         assert(movement(CGPoint(x: 8, y: 0), 56).isEmpty)
         assert(movement(CGPoint(x: 56, y: 0), 56) == [7])

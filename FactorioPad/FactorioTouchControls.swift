@@ -119,6 +119,12 @@ struct FactorioTouchLayout {
         }
     }
 
+    static func nativeKeyboardFrame(in viewport: CGRect) -> CGRect {
+        let inset = max(8, min(viewport.width, viewport.height) * 0.016)
+        return CGRect(x: viewport.maxX - inset - 44, y: viewport.maxY - inset - 44,
+            width: 44, height: 44)
+    }
+
     static func movement(at point: CGPoint, radius: CGFloat) -> Set<Int32> {
         guard radius > 0, hypot(point.x, point.y) > radius * 0.18 else { return [] }
         let threshold = hypot(point.x, point.y) * 0.38
