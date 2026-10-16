@@ -50,7 +50,7 @@ extension Notification.Name {
 struct FactorioLaunchView: View {
     private enum Stage { case gameSetup, openingGame, setup, syncing, playing, stopped }
 
-    @AppStorage("FactorioLowGraphics") private var lowGraphics = false
+    @AppStorage("FactorioGraphicsPreset") private var graphicsPreset = FactorioLoader.graphicsPreset
     @State private var stage = Stage.openingGame
     @State private var importProgress = 0.0
     @State private var showsControls = false
@@ -113,15 +113,16 @@ struct FactorioLaunchView: View {
                                 HStack {
                                     Text("Graphics").font(.headline)
                                     Spacer()
-                                    Picker("Graphics", selection: $lowGraphics) {
-                                        Text("High").tag(false)
-                                        Text("Low (less memory)").tag(true)
+                                    Picker("Graphics", selection: $graphicsPreset) {
+                                        Text("Low").tag("low")
+                                        Text("Medium").tag("medium")
+                                        Text("High").tag("high")
                                     }
                                     .pickerStyle(.menu)
                                     .labelsHidden()
                                     .focusable(false)
                                 }
-                                Text("Low reduces texture detail and disables high-quality animations and shadows.")
+                                Text("Medium uses less memory than High. Low also reduces animation quality. High can exceed your device's memory limit.")
                                     .foregroundStyle(.secondary)
                             }
                             Text("Choose a folder in iCloud Drive to share saves with Factorio on your computer.")

@@ -22,8 +22,8 @@ The companion supports Windows x64, Macs with Apple silicon, and Linux x64.
 Wait for the import progress bar to finish. FactorioPad keeps its own copy for later launches.
 After import, you can remove the original folder.
 Before you press `Play`, choose a mode from the `Controls` and `Graphics` dropdowns.
-`Low (less memory)` reduces texture detail and disables high-quality animations and shadows. The app remembers both choices.
-Texture compression runs on the CPU. `High` retains high-quality textures, animations, and shadows.
+`Medium` is the default. `Low` also reduces animation quality. `High` increases texture and shadow detail but can exceed your device's memory limit.
+The app remembers your choice and preserves existing Low or High selections. Supported GPUs use Factorio's default texture compression.
 Save sharing is optional. Choose `Play without sync` to start without it.
 
 Keep your generated IPA private because it contains your Factorio executable.

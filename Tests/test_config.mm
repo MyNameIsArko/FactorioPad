@@ -73,7 +73,7 @@ int main(void)
             @"[graphics]\ngpu-accelerated-compression=true\ngpu-accelerated-mipmap-compression=true\ntexture-compression-level=high-quality\n",
             @"[Graphics]\n graphics-quality = high \n high-quality-animations = true \n high-quality-shadows = true \ntexture-compression-level=none\ngpu-accelerated-compression=false\n[interface]\ncustom-ui-scale=1.25\n",
             @"[interface]\ncustom-ui-scale=1.25\n"]) {
-            NSString *low = FactorioConfigureGraphics(config, YES);
+            NSString *low = FactorioConfigureGraphics(config, @"low");
             NSCAssert([low containsString:@"graphics-quality=medium"] &&
                 [low containsString:@"high-quality-animations=false"] &&
                 [low containsString:@"high-quality-shadows=false"] &&
@@ -82,9 +82,9 @@ int main(void)
                 ![low containsString:@"high-quality-animations = true"] &&
                 ![low containsString:@"high-quality-shadows = true"],
                 @"low graphics must replace existing values and work without a graphics section");
-            NSCAssert([FactorioConfigureGraphics(low, YES) isEqualToString:low],
+            NSCAssert([FactorioConfigureGraphics(low, @"low") isEqualToString:low],
                 @"low graphics must remain stable across launches");
-            NSString *high = FactorioConfigureGraphics(low, NO);
+            NSString *high = FactorioConfigureGraphics(low, @"high");
             NSCAssert([high containsString:@"graphics-quality=high"] &&
                 [high containsString:@"high-quality-animations=true"] &&
                 [high containsString:@"high-quality-shadows=true"] &&
@@ -92,22 +92,57 @@ int main(void)
                 ![high containsString:@"high-quality-animations=false"] &&
                 ![high containsString:@"high-quality-shadows=false"],
                 @"switching back to high graphics must restore all preset values");
-            NSCAssert([FactorioConfigureGraphics(high, NO) isEqualToString:high],
+            NSCAssert([FactorioConfigureGraphics(high, @"high") isEqualToString:high],
                 @"high graphics must remain stable across launches");
-            for (NSString *preset in @[low, high]) {
-                NSCAssert([preset containsString:@"gpu-accelerated-compression=false"] &&
-                    [preset containsString:@"gpu-accelerated-mipmap-compression=false"] &&
-                    ![preset containsString:@"gpu-accelerated-compression=true"] &&
-                    ![preset containsString:@"gpu-accelerated-mipmap-compression=true"],
-                    @"both presets must disable GPU compression for first-load memory safety");
+            NSString *medium = FactorioConfigureGraphics(high, @"medium");
+            NSCAssert([medium containsString:@"graphics-quality=medium"] &&
+                [medium containsString:@"high-quality-animations=true"] &&
+                [medium containsString:@"high-quality-shadows=false"] &&
+                ![medium containsString:@"graphics-quality=high"] &&
+                ![medium containsString:@"high-quality-shadows=true"],
+                @"medium must use lower-resolution sprites, full animations, and lower-resolution shadows");
+            NSCAssert([FactorioConfigureGraphics(medium, @"medium") isEqualToString:medium],
+                @"medium graphics must remain stable across launches");
+            for (NSString *preset in @[low, medium, high]) {
                 if ([config containsString:@"texture-compression-level=high-quality"]) {
                     NSCAssert([preset containsString:@"texture-compression-level=high-quality"],
-                        @"CPU compression must retain high-quality compressed textures");
+                        @"presets must retain high-quality compressed textures");
                 }
             }
             for (NSString *setting in @[@"custom-ui-scale=1.25", @"texture-compression-level=none", @"gpu-accelerated-compression=false"]) {
-                if ([config containsString:setting]) NSCAssert([low containsString:setting] && [high containsString:setting],
+                if ([config containsString:setting]) NSCAssert([low containsString:setting] && [medium containsString:setting] && [high containsString:setting],
                     @"graphics presets must preserve unrelated preferences and GPU compression safeguards");
+            }
+        }
+        NSString *suite = [@"FactorioPad.GraphicsTests." stringByAppendingString:NSUUID.UUID.UUIDString];
+        NSUserDefaults *preferences = [[NSUserDefaults alloc] initWithSuiteName:suite];
+        NSCAssert([FactorioReadGraphicsPreset(preferences) isEqualToString:@"medium"],
+            @"a clean installation must default to medium");
+        [preferences setBool:YES forKey:@"FactorioLowGraphics"];
+        NSCAssert([FactorioReadGraphicsPreset(preferences) isEqualToString:@"low"], @"preserve the old low selection");
+        [preferences setBool:NO forKey:@"FactorioLowGraphics"];
+        NSCAssert([FactorioReadGraphicsPreset(preferences) isEqualToString:@"high"], @"preserve the old high selection");
+        for (NSString *preset in @[@"low", @"medium", @"high"]) {
+            [preferences setObject:preset forKey:@"FactorioGraphicsPreset"];
+            NSCAssert([FactorioReadGraphicsPreset(preferences) isEqualToString:preset],
+                @"the new selection must override the old boolean preference");
+        }
+        [preferences setObject:@"unknown" forKey:@"FactorioGraphicsPreset"];
+        NSCAssert([FactorioReadGraphicsPreset(preferences) isEqualToString:@"medium"], @"invalid presets must fall back to medium");
+        [preferences removePersistentDomainForName:suite];
+        for (NSString *config in @[defaults,
+            @"[graphics]\ngpu-accelerated-compression=false\ngpu-accelerated-mipmap-compression=false\ntexture-compression-level=high-quality\n[interface]\ncustom-ui-scale=1.25\n"]) {
+            for (NSString *preset in @[@"low", @"medium", @"high"]) {
+                NSString *restored = FactorioConfigureTextureCompression(FactorioConfigureGraphics(config, preset), YES);
+                NSCAssert(![restored containsString:@"gpu-accelerated-compression="] &&
+                    ![restored containsString:@"gpu-accelerated-mipmap-compression="] &&
+                    [restored containsString:@"texture-compression-level=high-quality"],
+                    @"compatible GPUs must use default compression, including upgrades from the CPU workaround");
+                NSCAssert([FactorioConfigureTextureCompression(restored, YES) isEqualToString:restored],
+                    @"removing the workaround must be stable across launches");
+                if ([config containsString:@"custom-ui-scale=1.25"]) {
+                    NSCAssert([restored containsString:@"custom-ui-scale=1.25"], @"preserve unrelated preferences");
+                }
             }
         }
         for (NSString *graphics in @[
@@ -116,8 +151,7 @@ int main(void)
             @"[graphics]\nhigh-quality-animations=false\n[interface]\ncustom-ui-scale=1.25\n",
             @"[interface]\ncustom-ui-scale=1.25\n"
         ]) {
-            NSString *safe = FactorioApplyConfigSection(FactorioConfigureGraphics(graphics, NO), @"[graphics]",
-                @[@"texture-compression-level=none"], YES, YES);
+            NSString *safe = FactorioConfigureTextureCompression(FactorioConfigureGraphics(graphics, @"medium"), NO);
             NSCAssert([safe containsString:@"texture-compression-level=none"] &&
                 [safe containsString:@"gpu-accelerated-compression=false"] &&
                 [safe containsString:@"gpu-accelerated-mipmap-compression=false"] &&
@@ -127,8 +161,8 @@ int main(void)
                 ![safe containsString:@"gpu-accelerated-mipmap-compression=true"],
                 @"unsupported GPUs must disable compression in existing and new configurations");
             NSCAssert([safe containsString:@"custom-ui-scale=1.25"], @"the GPU fallback must preserve unrelated preferences");
-            NSCAssert([FactorioApplyConfigSection(FactorioConfigureGraphics(safe, NO), @"[graphics]",
-                @[@"texture-compression-level=none"], YES, YES) isEqualToString:safe], @"the fallback must survive repeated launches");
+            NSCAssert([FactorioConfigureTextureCompression(FactorioConfigureGraphics(safe, @"medium"), NO)
+                isEqualToString:safe], @"the fallback must survive repeated launches");
         }
         NSArray<NSString *> *examples = @[
             @"[path]\nread-data=/old\nwrite-data=/old-write\n[graphics]\nquality=high\n",
