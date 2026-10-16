@@ -22,11 +22,6 @@ Use Factorio 2.0.77 for testing. Other versions are untested and are not guarant
 Run `uv run bash Tools/build_ipa.sh --prepare-only`, then open `FactorioPad.xcodeproj` in Xcode.
 Run `uv run bash Tests/run_tests.sh` before submitting iOS changes.
 
-For touch interface changes, boot an iOS simulator in Xcode.
-Find its UUID with `xcrun simctl list devices booted`.
-Run `bash Tests/run_touch_ui_tests.sh UUID` to test gestures, cancellation, tool groups, and mode changes.
-The test app shows the production overlay without game assets. Add `--menus` or `--tools` to preview those states.
-
 ## Open a pull request
 
 1. Keep the change focused on one issue.

@@ -35,33 +35,8 @@ Keep your generated IPA private because it contains your Factorio executable.
 - Touch controls provide movement, aiming, building, mining, and shortcuts on iPhone and iPad.
 - New installations use a 150% interface scale and one visible quickbar.
 - New freeplay games skip the opening cutscene and tutorial prompt.
-- Tap the keyboard button to type. Hold it to see the gamepad controls.
+- Tap the keyboard button to type. Hold it to see the guide for your current controls.
 - Full-screen play keeps a connected mouse pointer inside the game.
-
-## Play with touch controls
-
-Choose `Mouse and keyboard emulation` before you press `Play`.
-The hand button and touch gameplay overlay are unavailable in `Factorio native controls` mode. The keyboard button stays at the bottom right for typing.
-The default touch layout appears when no gamepad, keyboard, or mouse is connected.
-Tap the hand button to show or hide it. The app remembers that choice.
-
-Use `Menus` for direct taps and inventory drags. Gameplay controls collapse to leave the game windows clear.
-Choose `Play` for the movement pad and the action buttons. Drag on the game to aim without clicking.
-Opening or closing `Items` keeps your current touch mode.
-Hold `Build` to place or open at the pointer. Drag that button to aim while you build.
-Hold and drag `Mine` or `Fire` to aim while acting. Release to stop.
-Drag from anywhere on the movement pad to walk. Pinch to zoom in `Play` mode.
-
-Tap `Menus` or `Play` above the movement pad to switch modes.
-Use `Tools` to open a compact panel by the right action cluster. Choose `Build`, `Items`, or `World` for gameplay actions.
-Choose `App` in Tools for the keyboard, control guide, and hide control.
-After hiding the controls, tap the hand button near your left thumb to show them again.
-In `Tools` → `Items`, choose `Move stack` or `Move all`, then tap an item to transfer it.
-`Move all` transfers every item of the tapped type. Tap an empty slot to transfer all items.
-The action applies to one touch. Tap its label above the movement pad to cancel it.
-The controls use Factorio's default keyboard bindings. Custom bindings can change their actions.
-The controls sit inside the safe area, with extra room for your grip on both iPhone and iPad.
-Layout editing is not included.
 
 ## Share saves through iCloud
 

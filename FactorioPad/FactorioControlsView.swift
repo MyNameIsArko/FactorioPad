@@ -1,4 +1,5 @@
 import SwiftUI
+import GameController
 
 struct FactorioControllerModePicker: View {
     var activeNativeController: Bool? = nil
@@ -37,6 +38,7 @@ struct FactorioControlsView: View {
     var onSaves: () -> Void
     var logURL: URL? = nil
     var nativeControllerActive = false
+    @State var gamepadConnected = GCController.controllers().contains { $0.extendedGamepad != nil }
 
     typealias Activity = (title: String, icon: String, controls: [(action: String, buttons: String)])
     static let activities: [Activity] = [
@@ -101,43 +103,34 @@ struct FactorioControlsView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Label("Controls", systemImage: "gamecontroller")
+                Label(gamepadConnected ? "Gamepad controls" : "Touch controls",
+                    systemImage: gamepadConnected ? "gamecontroller" : "hand.tap")
                     .font(.title2.bold())
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
-                Button("Save sync", action: onSaves)
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                    .focusable(false)
-                Button("Back to game", action: onClose)
-                    .buttonStyle(.borderedProminent)
-                    .tint(.orange)
-                    .controlSize(.large)
-                    .focusable(false)
             }
             .padding(20)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    FactorioControllerModePicker(activeNativeController: nativeControllerActive)
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Touch controls", systemImage: "hand.tap").font(.headline)
-                        Text("Touch gameplay uses Mouse and keyboard emulation. Tap the hand button to show or hide the default layout.")
-                        Text("Use Menus to tap game windows directly. Choose Play for the movement pad and action buttons. Drag on the game to aim. Items keeps your current touch mode.")
-                        Text("Hold and drag Build, Mine, or Fire to aim while acting. Release to stop. Pinch to zoom in Play mode.")
-                        Text("Tap Menus or Play above the movement pad to switch modes.")
-                        Text("Tools opens a compact panel beside your right thumb. Choose Build, Items, or World for actions.")
-                        Text("Choose App in Tools for the keyboard, control guide, and hide control. After hiding the controls, tap the hand button near your left thumb to show them again.")
-                        Text("In Tools → Items, choose Move stack or Move all, then tap an item. Move all transfers every item of that type. An empty slot transfers all items. Tap the action label to cancel.")
-                        Text("These controls use Factorio's default keyboard bindings. Custom bindings in Factorio can change their actions.")
-                    }
-                    .foregroundStyle(.secondary)
-                    if let log = logURL {
-                        ShareLink("Share log", item: log)
-                            .buttonStyle(.bordered)
-                            .focusable(false)
-                    }
-                    if nativeControllerActive {
+                    if !gamepadConnected {
+                        VStack(alignment: .leading, spacing: 8) {
+                            if nativeControllerActive {
+                                Text("For touch gameplay, save and restart the app with Mouse and keyboard emulation selected.")
+                                    .foregroundStyle(.orange)
+                            }
+                            Text("Touch gameplay uses Mouse and keyboard emulation. Tap the hand button to show or hide the default layout.")
+                            Text("Use Menus to tap game windows directly. Choose Play for the movement pad and action buttons. Drag on the game to aim. Items keeps your current touch mode.")
+                            Text("Hold and drag Build, Mine, or Fire to aim while acting. Release to stop. Pinch to zoom in Play mode.")
+                            Text("Tap Menus or Play above the movement pad to switch modes.")
+                            Text("Tools opens a compact panel beside your right thumb. Choose Build, Items, or World for actions.")
+                            Text("Choose App in Tools for the keyboard, control guide, and hide control. After hiding the controls, tap the hand button near your left thumb to show them again.")
+                            Text("In Tools → Items, choose Move stack or Move all, then tap an item. Move all transfers every item of that type. An empty slot transfers all items. Tap the action label to cancel.")
+                            Text("These controls use Factorio's default keyboard bindings. Custom bindings in Factorio can change their actions.")
+                        }
+                        .foregroundStyle(.secondary)
+                    } else if nativeControllerActive {
+                        FactorioControllerModePicker(activeNativeController: nativeControllerActive)
                         Text("Factorio handles your controller directly, with analog movement and its controller interface.")
                             .foregroundStyle(.secondary)
                         Text("The hand button and touch gameplay overlay are unavailable in this mode. Use Mouse and keyboard emulation for touch gameplay.")
@@ -147,6 +140,7 @@ struct FactorioControlsView: View {
                         Text("Tap the keyboard button at the bottom right to type. Touch, physical keyboard, and mouse input remain available.")
                             .foregroundStyle(.secondary)
                     } else {
+                        FactorioControllerModePicker(activeNativeController: nativeControllerActive)
                         Text("Hold LB (Shift) or RB (Ctrl) before the other button. In an inventory, point at the stack you want to transfer.")
                             .foregroundStyle(.secondary)
                         Text("To change a quickbar assignment, point at the slot and press RB + D-pad ↑ to clear it. With an empty hand, press RT on the empty slot and choose a replacement item. Release LT before clearing a slot.")
@@ -167,6 +161,31 @@ struct FactorioControlsView: View {
             }
         }
         .background(Color(white: 0.06).ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            HStack {
+                if let log = logURL {
+                    ShareLink("Share log", item: log)
+                        .buttonStyle(.bordered)
+                }
+                Button("Save sync", action: onSaves)
+                    .buttonStyle(.bordered)
+                Spacer()
+                Button("Back to game", action: onClose)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+            }
+            .controlSize(.large)
+            .focusable(false)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(Color(white: 0.06))
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in
+            gamepadConnected = GCController.controllers().contains { $0.extendedGamepad != nil }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidDisconnect)) { _ in
+            gamepadConnected = GCController.controllers().contains { $0.extendedGamepad != nil }
+        }
         .preferredColorScheme(.dark)
         .accessibilityAddTraits(.isModal)
     }

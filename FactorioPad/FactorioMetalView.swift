@@ -147,7 +147,12 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
         for name in [Notification.Name.GCKeyboardDidConnect, .GCKeyboardDidDisconnect,
             .GCControllerDidConnect, .GCControllerDidDisconnect] {
             lifecycleObservers.append(center.addObserver(forName: name, object: nil, queue: .main) {
-                [weak self] _ in self?.updateKeyboardButton()
+                [weak self] notification in
+                guard let self else { return }
+                if notification.name == .GCControllerDidDisconnect && !self.hasGamepad {
+                    UserDefaults.standard.removeObject(forKey: "FactorioTouchControls")
+                }
+                self.updateKeyboardButton()
             })
         }
         for mouse in GCMouse.mice() { installMouse(mouse) }
@@ -255,7 +260,7 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
     }
 
     @objc private func toggleTouchControls() {
-        guard !FactorioLoader.usesNativeController else { return }
+        guard !FactorioLoader.usesNativeController && !hasGamepad else { return }
         UserDefaults.standard.set(touchControls.isHidden, forKey: "FactorioTouchControls")
         updateTouchControls()
     }
@@ -263,7 +268,7 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
     private func updateTouchControls() {
         let wanted = (UserDefaults.standard.object(forKey: "FactorioTouchControls") as? Bool)
             ?? (!hasGamepad && !hasPhysicalKeyboard && !hasPhysicalMouse)
-        let hidden = !wanted || !inputActive || !onScreenKeyboard.isHidden || FactorioLoader.usesNativeController
+        let hidden = !wanted || hasGamepad || !inputActive || !onScreenKeyboard.isHidden || FactorioLoader.usesNativeController
         if touchControls.isHidden != hidden {
             cancelGameTouch()
             releaseTouchInput()
@@ -272,7 +277,7 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
                 movePointer(to: CGPoint(x: bounds.midX, y: bounds.midY))
             }
         }
-        touchControlsButton.isHidden = !inputActive || !onScreenKeyboard.isHidden || !hidden || FactorioLoader.usesNativeController
+        touchControlsButton.isHidden = !inputActive || !onScreenKeyboard.isHidden || !hidden || hasGamepad || FactorioLoader.usesNativeController
         keyboardButton.isHidden = (hasPhysicalKeyboard && !hasGamepad) || !onScreenKeyboard.isHidden || !hidden
         touchControlsButton.accessibilityLabel = hidden ? "Show touch controls" : "Hide touch controls"
         touchControlsButton.tintColor = hidden ? .white : .systemOrange

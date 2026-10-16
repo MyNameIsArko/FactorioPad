@@ -129,17 +129,31 @@ struct FactorioLaunchView: View {
                             if let status { Text(status).foregroundStyle(.secondary) }
                             Button("Choose save folder") { selectsGameFolder = false; showsFolderPicker = true }
                                 .buttonStyle(.borderedProminent)
-                            if FactorioSaveSync.hasFolder {
-                                Button("Play") { Task { await syncBeforePlay() } }
-                            } else {
-                                Button("Play without sync") { stage = .playing }
-                            }
-                        }
-                        if let log = FactorioLoader.startupLogURL() {
-                            ShareLink("Share log", item: log)
                         }
                     }
                     .padding(32)
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    HStack {
+                        if let log = FactorioLoader.startupLogURL() {
+                            ShareLink("Share log", item: log)
+                                .buttonStyle(.bordered)
+                        }
+                        Spacer()
+                        if stage == .setup {
+                            if FactorioSaveSync.hasFolder {
+                                Button("Play") { Task { await syncBeforePlay() } }
+                                    .buttonStyle(.borderedProminent)
+                            } else {
+                                Button("Play without sync") { stage = .playing }
+                                    .buttonStyle(.borderedProminent)
+                            }
+                        }
+                    }
+                    .controlSize(.large)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(Color(white: 0.06))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(white: 0.06))
