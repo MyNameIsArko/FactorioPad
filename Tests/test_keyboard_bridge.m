@@ -21,9 +21,26 @@ static int captureEvent(FPSDLEvent *event)
     return 1;
 }
 
+static int cursorState;
+static int cursorQuery(int toggle)
+{
+    NSCAssert(toggle == -1, @"Cursor inspection must never enable or disable the SDL cursor");
+    return cursorState;
+}
+
 int main(void)
 {
     @autoreleasepool {
+        NSCAssert(FactorioMouseCursorVisibility() == -1, @"Missing SDL cursor support must be unknown");
+        gShowCursor = cursorQuery;
+        for (NSNumber *state in @[@0, @1, @2, @(-1)]) {
+            cursorState = state.intValue;
+            int expected = cursorState == 0 || cursorState == 1 ? cursorState : -1;
+            NSCAssert(FactorioMouseCursorVisibility() == expected, @"Normalize unexpected SDL cursor results");
+            NSCAssert(cursorState == state.intValue, @"Querying must preserve the game's cursor state");
+        }
+        gShowCursor = NULL;
+        NSCAssert(FactorioMouseCursorVisibility() == -1, @"Unavailable cursor support must remain optional");
         receivedText = [NSMutableData data];
         keyTypes = [NSMutableArray array];
         gPushEvent = captureEvent;

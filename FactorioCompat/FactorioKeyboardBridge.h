@@ -10,6 +10,9 @@ FactorioKeyboardBridgeSetGuestHandle(void *handle, BOOL nativeController);
 
 FOUNDATION_EXPORT void FactorioInputSetActive(BOOL active);
 
+// SDL cursor state: 0 hidden, 1 visible, -1 unavailable. This never changes it.
+FOUNDATION_EXPORT int FactorioMouseCursorVisibility(void);
+
 FOUNDATION_EXPORT void
 FactorioKeyboardInsertText(NSString *text);
 

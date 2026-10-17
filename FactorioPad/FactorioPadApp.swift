@@ -30,6 +30,11 @@ final class FactorioSceneDelegate: UIResponder, UIWindowSceneDelegate {
         let window = UIWindow(windowScene: scene)
         window.rootViewController = FactorioRootController(rootView: FactorioLaunchView())
         window.makeKeyAndVisible()
+        FactorioLoader.logMessage(
+            "Scene window: \(Int(window.bounds.width))x\(Int(window.bounds.height)); " +
+            "screen: \(Int(scene.screen.bounds.width))x\(Int(scene.screen.bounds.height)); " +
+            "native: \(Int(scene.screen.nativeBounds.width))x\(Int(scene.screen.nativeBounds.height))"
+        )
         self.window = window
     }
 }
