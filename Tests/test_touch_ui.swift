@@ -1,7 +1,8 @@
 import UIKit
 
 // The keyboard bridge is outside this native interface test.
-func FactorioKeyboardInsertText(_ text: String) {}
+private var typedKeys: [String] = []
+func FactorioKeyboardTypeKey(_ text: String) { typedKeys.append(text) }
 func FactorioKeyboardBackspace() {}
 func FactorioKeyboardReturn() {}
 func FactorioKeyboardTab() {}
@@ -17,6 +18,23 @@ private func descendants(_ view: UIView) -> [UIView] {
 
 private func visible(_ view: UIView) -> Bool {
     !view.isHidden && (view.superview.map(visible) ?? true)
+}
+
+private func testKeyboard() {
+    let keyboard = FactorioOnScreenKeyboardView(frame: CGRect(x: 0, y: 0, width: 844, height: 280))
+    func tap(_ label: String) {
+        descendants(keyboard).compactMap { $0 as? UIButton }.first { $0.accessibilityLabel == label }!
+            .sendActions(for: .touchUpInside)
+    }
+    tap("k")
+    tap("Shift")
+    tap("K")
+    tap("123")
+    tap("#+=")
+    tap("`")
+    tap("~")
+    tap("space")
+    assert(typedKeys == ["k", "K", "`", "~", " "], "Keyboard buttons must send key taps, including console keys")
 }
 
 private func testControls(_ controls: FactorioTouchControlsView) {
@@ -162,6 +180,7 @@ private final class PreviewController: UIViewController {
         guard !tested else { return }
         tested = true
         UIView.setAnimationsEnabled(false)
+        testKeyboard()
         testControls(controls)
         let all = descendants(controls)
         let mode = all.compactMap { $0 as? UIButton }.first { $0.accessibilityLabel?.hasPrefix("Touch mode:") == true }!

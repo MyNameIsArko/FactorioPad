@@ -170,7 +170,7 @@ final class FactorioOnScreenKeyboardView: UIView {
 
     private func insertText(_ text: String) {
         let previousRows = layout.rows
-        FactorioKeyboardInsertText(layout.insert(text))
+        FactorioKeyboardTypeKey(layout.insert(text))
         if layout.rows != previousRows { rebuildKeys() }
     }
 

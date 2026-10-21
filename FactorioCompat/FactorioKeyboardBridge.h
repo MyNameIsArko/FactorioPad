@@ -14,6 +14,9 @@ FOUNDATION_EXPORT void
 FactorioKeyboardInsertText(NSString *text);
 
 FOUNDATION_EXPORT void
+FactorioKeyboardTypeKey(NSString *text);
+
+FOUNDATION_EXPORT void
 FactorioKeyboardBackspace(void);
 
 FOUNDATION_EXPORT void
