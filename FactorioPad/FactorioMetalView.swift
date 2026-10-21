@@ -228,9 +228,7 @@ final class FactorioHostUIView: UIView, UIGestureRecognizerDelegate {
             FactorioLoader.start(withWindowSize: bounds.size)
             updateTouchControls()
         }
-        keyboardButton.frame = FactorioLoader.usesNativeController
-            ? FactorioTouchLayout.nativeKeyboardFrame(in: bounds)
-            : CGRect(x: layout.modeSwitch.midX + 4, y: layout.modeSwitch.minY, width: 44, height: 44)
+        keyboardButton.frame = FactorioTouchLayout.keyboardFrame(in: bounds)
         FactorioControllerBridgeSetViewportSize(bounds.width, bounds.height)
         if !touchControls.isHidden && pointerPosition == nil { movePointer(to: CGPoint(x: bounds.midX, y: bounds.midY)) }
         FactorioTouchUpdateWindowSize()

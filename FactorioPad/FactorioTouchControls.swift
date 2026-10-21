@@ -119,7 +119,7 @@ struct FactorioTouchLayout {
         }
     }
 
-    static func nativeKeyboardFrame(in viewport: CGRect) -> CGRect {
+    static func keyboardFrame(in viewport: CGRect) -> CGRect {
         let inset = max(8, min(viewport.width, viewport.height) * 0.016)
         return CGRect(x: viewport.maxX - inset - 44, y: viewport.maxY - inset - 44,
             width: 44, height: 44)
