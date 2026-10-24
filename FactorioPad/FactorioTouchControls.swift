@@ -125,6 +125,10 @@ struct FactorioTouchLayout {
             width: 44, height: 44)
     }
 
+    static func touchToggleFrame(in viewport: CGRect) -> CGRect {
+        keyboardFrame(in: viewport).offsetBy(dx: 0, dy: -52)
+    }
+
     static func movement(at point: CGPoint, radius: CGFloat) -> Set<Int32> {
         guard radius > 0, hypot(point.x, point.y) > radius * 0.18 else { return [] }
         let threshold = hypot(point.x, point.y) * 0.38

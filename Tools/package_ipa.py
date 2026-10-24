@@ -117,6 +117,16 @@ def copy_app(source, target, prefix):
                 shutil.copyfileobj(reader, writer)
 
 
+def check_template_version(ipa, release):
+    with zipfile.ZipFile(ipa) as archive:
+        prefix = app_prefix(archive)
+        version = plistlib.loads(archive.read(prefix + "Info.plist")).get("CFBundleShortVersionString")
+    expected = release.removeprefix("v")
+    if not version or version != expected:
+        raise ValueError(f"Template version {version or 'missing'} does not match release {release}. "
+                         f"Rebuild FactorioPad-template.ipa with app version {expected}.")
+
+
 def make_template(ipa, output):
     if output.exists():
         raise ValueError("The output IPA already exists. Choose a new path.")
@@ -216,6 +226,9 @@ def main():
     template = commands.add_parser("template", help="Remove game files and signatures from a maintainer IPA.")
     template.add_argument("ipa", type=pathlib.Path)
     template.add_argument("output", type=pathlib.Path)
+    version = commands.add_parser("check-version", help="Make sure that the template app version matches the release tag.")
+    version.add_argument("ipa", type=pathlib.Path)
+    version.add_argument("release")
     personal = commands.add_parser("package", help="Create a private IPA and a separate FactorioData folder.")
     personal.add_argument("template", type=pathlib.Path)
     personal.add_argument("factorio_app", type=pathlib.Path)
@@ -227,7 +240,10 @@ def main():
     dmg.add_argument("seven_zip", type=pathlib.Path)
     args = parser.parse_args()
     try:
-        if args.command == "template":
+        if args.command == "check-version":
+            check_template_version(args.ipa, args.release)
+            print(f"Template app version matches {args.release}.")
+        elif args.command == "template":
             make_template(args.ipa, args.output)
             print(f"Game-free template ready: {args.output}")
         elif args.command == "dmg":

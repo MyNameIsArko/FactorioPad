@@ -43,6 +43,11 @@ jobs:
           TEMPLATE_RELEASE: ${{ inputs.template_release }}
         run: gh release download "$TEMPLATE_RELEASE" --repo "$GITHUB_REPOSITORY" --pattern FactorioPad-template.ipa --dir build-input
         shell: bash
+      - name: Check template version
+        env:
+          TEMPLATE_RELEASE: ${{ inputs.template_release }}
+        run: uv run --frozen python Tools/package_ipa.py check-version build-input/FactorioPad-template.ipa "$TEMPLATE_RELEASE"
+        shell: bash
       - name: Test portable packaging
         run: uv run --frozen python Tests/test_package_ipa.py
       - name: Test the shared companion

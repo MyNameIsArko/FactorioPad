@@ -15,7 +15,7 @@ import shutil
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Tools"))
-from package_ipa import MARKER, app_prefix, arm64_slice, make_template, package, package_dmg, remove_signature
+from package_ipa import MARKER, app_prefix, arm64_slice, check_template_version, make_template, package, package_dmg, remove_signature
 from patch_factorio import CPU_TYPE_ARM64, MH_MAGIC_64, MH_DYLIB, LC_ID_DYLIB, TRANSPARENT_TEXTURE, patch_transparent_texture, SPRITE_MASK_FORMATS, patch_sprite_mask_formats, TERRAIN_EFFECT_FORMAT, patch_terrain_effect_format
 
 
@@ -116,6 +116,7 @@ def main():
         with zipfile.ZipFile(source, "w") as archive:
             archive.writestr(prefix + "FactorioPad", b"compiled host")
             archive.writestr(prefix + "Info.plist", plistlib.dumps({"FactorioPadExternalDataVersion": 1, "UIFileSharingEnabled": False,
+                "CFBundleShortVersionString": "3.4.5",
                 "CFBundleIcons": {"CFBundlePrimaryIcon": {"CFBundleIconName": "AppIcon"}}}))
             archive.writestr(prefix + "Frameworks/FactorioCompat.framework/FactorioCompat", b"compiled shims")
             archive.writestr("Payload/", b"")
@@ -126,6 +127,13 @@ def main():
                 archive.writestr(prefix + name, b"private content")
         template = root / "template.ipa"
         make_template(source, template)
+        check_template_version(template, "v3.4.5")
+        check_template_version(template, "3.4.5")
+        rejected(lambda: check_template_version(template, "v3.4.6"))
+        missing_version = root / "missing-version.ipa"
+        with zipfile.ZipFile(missing_version, "w") as archive:
+            archive.writestr(prefix + "Info.plist", plistlib.dumps({}))
+        rejected(lambda: check_template_version(missing_version, "v3.4.5"))
         with zipfile.ZipFile(template) as archive:
             assert len(archive.namelist()) == 6
             assert json.loads(archive.read(prefix + MARKER)) == {"format": 2}
@@ -133,6 +141,7 @@ def main():
             assert archive.read(prefix + "AppIcon60x60@2x.png") == b"private content"
             info = plistlib.loads(archive.read(prefix + "Info.plist"))
             assert info["UIFileSharingEnabled"] and info["LSSupportsOpeningDocumentsInPlace"]
+            assert info["CFBundleShortVersionString"] == "3.4.5", "Templates must keep the app version"
             assert info["CFBundleIcons"]["CFBundlePrimaryIcon"]["CFBundleIconName"] == "AppIcon"
         rejected(lambda: make_template(source, template))
         app = root / "factorio.app"
@@ -154,6 +163,7 @@ def main():
             assert plistlib.loads(archive.read(prefix + "Info.plist"))["CFBundleIcons"]["CFBundlePrimaryIcon"]["CFBundleIconName"] == "AppIcon"
             info = plistlib.loads(archive.read(prefix + "Info.plist"))
             assert info["UIFileSharingEnabled"] and info["LSSupportsOpeningDocumentsInPlace"]
+            assert info["CFBundleShortVersionString"] == "3.4.5", "Personal IPAs must keep the app version, not the game version"
             binary = archive.read(prefix + "Frameworks/FactorioGuest.framework/FactorioGuest")
             assert struct.unpack_from("<I", binary, 12)[0] == MH_DYLIB
             assert struct.unpack_from("<12I", binary, 1216) == instructions
