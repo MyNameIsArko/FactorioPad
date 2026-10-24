@@ -4,6 +4,9 @@ GitHub Actions builds the companions for Windows, macOS, and Linux.
 The workflow needs an existing `FactorioPad-template.ipa` attached to the release.
 The workflow attaches each companion archive to that release.
 
+Before building, set the app and companion versions to match the release tag.
+Build a fresh template for each release. The workflow rejects a template with a different app version.
+
 1. Create a draft GitHub release with `FactorioPad-template.ipa` attached.
 2. In the repository, open `Actions` and select `Build companion releases`.
 3. Click `Run workflow` and enter the release tag, such as `v2.0.1`.

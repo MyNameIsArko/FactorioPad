@@ -36,6 +36,10 @@ import CoreGraphics
             assert(keyboard.minX > viewport.midX && keyboard.minY > viewport.midY)
             assert(abs((viewport.maxX - keyboard.maxX) - (viewport.maxY - keyboard.maxY)) < 0.001,
                 "The keyboard button must use matching bottom and right edge gaps in every input mode")
+            let toggle = FactorioTouchLayout.touchToggleFrame(in: viewport)
+            assert(viewport.contains(toggle) && toggle.size == CGSize(width: 44, height: 44))
+            assert(toggle.minX == keyboard.minX && toggle.maxY == keyboard.minY - 8,
+                "Show touch controls must sit above the keyboard with an eight-point gap")
         }
         assert(movement(.zero, 56).isEmpty)
         assert(movement(CGPoint(x: 8, y: 0), 56).isEmpty)
