@@ -3,14 +3,14 @@ import CoreGraphics
 
 enum FactorioTouchAction: String, CaseIterable {
     case build, mine, rotate, pick, inventory, more
-    case transferStack, transferAll, shoot, pickup, map, research, alt, vehicle
+    case transferStack, transferAll, drop, shoot, pickup, map, research, alt, vehicle
     case copy, paste, undo, blueprints, deconstruct, upgrade, zoomIn, zoomOut, back, keyboard
     case guide, hideControls
 
     static let primary: [Self] = [.build, .mine, .rotate, .pick, .inventory, .shoot, .more]
     static let groups: [[Self]] = [
         [.copy, .paste, .undo, .blueprints, .deconstruct, .upgrade],
-        [.transferStack, .transferAll, .pickup, .inventory, .back],
+        [.transferStack, .transferAll, .drop, .pickup, .inventory, .back],
         [.map, .research, .alt, .vehicle, .zoomIn, .zoomOut],
         [.keyboard, .guide, .hideControls]
     ]
@@ -25,6 +25,7 @@ enum FactorioTouchAction: String, CaseIterable {
         case .more: return "More"
         case .transferStack: return "Move stack"
         case .transferAll: return "Move all"
+        case .drop: return "Drop one"
         case .shoot: return "Shoot"
         case .pickup: return "Pick up"
         case .map: return "Map"
@@ -46,7 +47,7 @@ enum FactorioTouchAction: String, CaseIterable {
         }
     }
 
-    var held: Bool { [.build, .mine, .shoot, .pickup].contains(self) }
+    var held: Bool { [.build, .mine, .shoot, .pickup, .drop].contains(self) }
 
     var targetModifiers: UInt16? {
         switch self {
@@ -62,6 +63,7 @@ enum FactorioTouchAction: String, CaseIterable {
         case .rotate: return (21, 114, 0)
         case .pick: return (20, 113, 0)
         case .inventory: return (8, 101, 0)
+        case .drop: return (29, 122, 0)
         case .shoot: return (44, 32, 0)
         case .pickup: return (9, 102, 0)
         case .map: return (16, 109, 0)
@@ -110,7 +112,7 @@ struct FactorioTouchLayout {
         actions = positions.map { x, y, size in
             CGRect(x: center.x + x - size / 2, y: center.y + y - size / 2, width: size, height: size)
         }
-        modeSwitch = CGRect(x: stick.midX - 44, y: stick.minY - 52, width: 88, height: 44)
+        modeSwitch = CGRect(x: stick.midX - 40, y: stick.minY - 52, width: 80, height: 44)
         panel = CGRect(x: safeBounds.maxX - edgeInset - 272,
             y: safeBounds.maxY - bottom - 184, width: 272, height: 184)
         menuActions = (0..<3).map { index in
@@ -162,6 +164,7 @@ private extension FactorioTouchAction {
         case .more: return "square.grid.2x2.fill"
         case .transferStack: return "arrow.right.square"
         case .transferAll: return "arrow.right.square.fill"
+        case .drop: return "arrow.down.to.line"
         case .shoot: return "scope"
         case .pickup: return "hand.raised.fingers.spread.fill"
         case .map: return "map.fill"
@@ -213,6 +216,7 @@ final class FactorioTouchControlsView: UIView {
     private(set) var targetAction: FactorioTouchAction?
     private let stick = FactorioTouchStickView()
     private let modeButton = FactorioTouchOnlyButton(type: .system)
+    private let targetButton = FactorioTouchOnlyButton(type: .system)
     private let palette = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterialDark))
     private let groups = FactorioTouchSegments(items: ["Build", "Items", "World", "App"])
     private let closeButton = FactorioTouchOnlyButton(type: .custom)
@@ -232,16 +236,41 @@ final class FactorioTouchControlsView: UIView {
         addSubview(backdrop)
         stick.onMovement = { [weak self] in self?.onMovement?($0) }
         addSubview(stick)
-        styleSurface(modeButton, radius: 22)
-        modeButton.backgroundColor = touchSurface
-        addSubview(modeButton)
-        modeButton.titleLabel?.font = .systemFont(ofSize: 12, weight: .semibold)
-        modeButton.tintColor = .white
+        styleSurface(modeButton, radius: 12)
+        var modeConfiguration = UIButton.Configuration.plain()
+        modeConfiguration.title = "Pad"
+        modeConfiguration.imagePlacement = .leading
+        modeConfiguration.imagePadding = 6
+        modeConfiguration.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10)
+        modeConfiguration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
+        modeConfiguration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
+            var attributes = attributes
+            attributes.font = .systemFont(ofSize: 12, weight: .semibold)
+            return attributes
+        }
+        modeButton.configuration = modeConfiguration
+        modeButton.accessibilityLabel = "On-screen pad"
+        modeButton.accessibilityIdentifier = "pad-toggle"
+        modeButton.accessibilityHint = "Turn the movement pad and action buttons on or off."
         modeButton.addAction(UIAction { [weak self] _ in
             guard let self else { return }
-            if self.targetAction != nil { self.onModeChange?(); self.clearTargetAction() }
-            else { self.setPrecision(!self.precision) }
+            self.setPrecision(!self.precision)
         }, for: .touchUpInside)
+        addSubview(modeButton)
+        styleSurface(targetButton, radius: 16)
+        targetButton.backgroundColor = touchSurface
+        targetButton.titleLabel?.font = .systemFont(ofSize: 12, weight: .semibold)
+        targetButton.titleLabel?.numberOfLines = 2
+        targetButton.titleLabel?.textAlignment = .center
+        targetButton.tintColor = touchAmber
+        targetButton.accessibilityIdentifier = "transfer-cancel"
+        targetButton.accessibilityHint = "Tap an item to transfer it once, or tap here to cancel."
+        targetButton.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            self.onModeChange?()
+            self.clearTargetAction()
+        }, for: .touchUpInside)
+        addSubview(targetButton)
         for action in FactorioTouchAction.primary {
             let button = actionButton(action)
             buttons[action] = button
@@ -290,6 +319,7 @@ final class FactorioTouchControlsView: UIView {
         backdrop.frame = bounds
         stick.frame = layout.stick
         modeButton.frame = layout.modeSwitch
+        targetButton.frame = CGRect(x: layout.stick.minX, y: layout.stick.minY, width: layout.stick.width, height: 56)
         for (action, frame) in zip(FactorioTouchAction.primary, layout.actions) { buttons[action]?.frame = frame }
         for (button, frame) in zip(menuButtons, layout.menuActions) { button.frame = frame }
         palette.frame = layout.panel
@@ -347,12 +377,15 @@ final class FactorioTouchControlsView: UIView {
         buttons.values.forEach { $0.isHidden = !precision || toolsOpen }
         menuButtons.forEach { $0.isHidden = precision || toolsOpen }
         modeButton.isHidden = toolsOpen
-        modeButton.titleLabel?.numberOfLines = targetAction == nil ? 1 : 2
-        modeButton.titleLabel?.textAlignment = .center
-        modeButton.setTitle(targetAction.map { "\($0.title)\nTap item" } ?? (precision ? "Play" : "Menus"), for: .normal)
-        modeButton.accessibilityLabel = targetAction.map { "Cancel \($0.title)" } ?? "Touch mode: \(precision ? "Play" : "Menus")"
-        modeButton.accessibilityHint = targetAction != nil ? "Tap an item to transfer it once, or tap here to cancel." : "Tap to switch between Menus and Play."
-        modeButton.tintColor = targetAction != nil ? touchAmber : .white
+        modeButton.isSelected = precision
+        modeButton.configuration?.image = UIImage(systemName: precision ? "dpad.fill" : "dpad")
+        modeButton.tintColor = precision ? touchAmber : .white
+        modeButton.backgroundColor = precision ? touchAmber.withAlphaComponent(0.24) : touchSurface
+        modeButton.layer.borderColor = precision ? touchAmber.cgColor : UIColor.white.withAlphaComponent(0.13).cgColor
+        modeButton.accessibilityValue = precision ? "On" : "Off"
+        targetButton.isHidden = toolsOpen || targetAction == nil
+        targetButton.setTitle(targetAction.map { "\($0.title)\nTap item or cancel" }, for: .normal)
+        targetButton.accessibilityLabel = targetAction.map { "Cancel \($0.title)" }
     }
 
     private func showPalette(_ visible: Bool) {
@@ -380,6 +413,7 @@ final class FactorioTouchControlsView: UIView {
         if action == .keyboard { button.accessibilityHint = "Open the on-screen keyboard." }
         if action == .guide { button.accessibilityHint = "Show the touch and controller guide." }
         if action == .hideControls { button.accessibilityHint = "Show them again using the hand button near your left thumb." }
+        if action == .drop { button.accessibilityHint = "Tap to drop one held item at the cursor. Hold to keep dropping. Release to stop." }
         if action.targetModifiers != nil {
             button.accessibilityHint = action == .transferStack ? "Then tap a stack to move it to the other inventory." : "Then tap an item to move all items of its type. An empty slot moves all items."
         }
@@ -410,7 +444,7 @@ final class FactorioTouchControlsView: UIView {
                         self.targetAction = action
                         self.setSelected(action, true)
                         self.updateMode()
-                        UIAccessibility.post(notification: .announcement, argument: "\(action.title). Tap an item. Tap the mode button to cancel.")
+                        UIAccessibility.post(notification: .announcement, argument: "\(action.title). Tap an item. Tap the action label to cancel.")
                     } else if [.map, .research, .blueprints, .back].contains(action) { self.setPrecision(false) }
                     else if ![.zoomIn, .zoomOut].contains(action) { self.showPalette(false) }
                     if action == .guide { self.onHelp?() }

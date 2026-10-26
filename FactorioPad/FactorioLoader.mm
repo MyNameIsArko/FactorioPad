@@ -854,7 +854,7 @@ static void *FactorioOpenFramework(NSString *name, int flags)
     FactorioLog(@"Preparing input");
     if (!FactorioKeyboardBridgeSetGuestHandle(guest, FactorioNativeController)) {
         FactorioReportError(FactorioNativeController
-            ? @"This Factorio game file does not support native controller input. Select Mouse and keyboard emulation and reopen the app."
+            ? @"This Factorio game file does not support native controller input. Select Standard and reopen the app."
             : @"This Factorio game file does not provide compatible input functions.");
         return;
     }

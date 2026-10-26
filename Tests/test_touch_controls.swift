@@ -17,6 +17,8 @@ import CoreGraphics
             let frames = [layout.stick, layout.modeSwitch] + layout.actions
             assert(frames.allSatisfy { safe.contains($0) }, "Controls must stay inside the safe area: \(safe)")
             assert(layout.actions.allSatisfy { $0.width >= 44 && $0.height >= 44 })
+            assert(layout.modeSwitch.size == CGSize(width: 80, height: 44),
+                "The Pad toggle must fit its icon and label side by side with an accessible height")
             assert(layout.panel.width <= 280 && layout.panel.height <= 184 && safe.contains(layout.panel))
             assert(layout.panel.maxX == safe.maxX - layout.edgeInset)
             assert(layout.stick.minX - safe.minX >= layout.edgeInset)
@@ -55,6 +57,10 @@ import CoreGraphics
         assert(Set(groupedActions).count == groupedActions.count, "Each action must appear in only one Tools tab")
         assert(FactorioTouchAction.copy.key?.modifiers == 0x0040)
         assert(FactorioTouchAction.deconstruct.key?.modifiers == 0x0100)
+        assert(FactorioTouchAction.groups[1].contains(.drop))
+        assert(FactorioTouchAction.drop.key?.code == 29 && FactorioTouchAction.drop.key?.symbol == 122)
+        assert(FactorioTouchAction.drop.key?.modifiers == 0 && FactorioTouchAction.drop.held,
+            "Drop one must hold Z without modifiers until the finger is released")
         assert(FactorioTouchAction.transferStack.targetModifiers == 0x0001)
         assert(FactorioTouchAction.transferAll.targetModifiers == 0x0040)
         assert(FactorioTouchAction.allCases.filter { $0.targetModifiers != nil } == [.transferStack, .transferAll])

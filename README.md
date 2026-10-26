@@ -30,7 +30,7 @@ Keep your generated IPA private because it contains your Factorio executable.
 
 ## What changes on iPhone and iPad
 
-- A gamepad uses `Mouse and keyboard emulation` by default. Select `Factorio native controls` for analog movement and Factorio's controller interface.
+- `Standard` supports touch controls, a keyboard and mouse, or a gamepad. Select `Native gamepad` for analog movement and Factorio's controller interface. Touch controls are unavailable in that mode.
 - Physical keyboards and mice support typing, clicks, dragging, and scrolling.
 - Touch controls provide movement, aiming, building, mining, and shortcuts on iPhone and iPad.
 - New installations use a 150% interface scale and one visible quickbar.

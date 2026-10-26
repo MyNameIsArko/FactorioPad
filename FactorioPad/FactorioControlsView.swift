@@ -11,15 +11,19 @@ struct FactorioControllerModePicker: View {
                 Text("Controls").font(.headline)
                 Spacer()
                 Picker("Controls", selection: $nativeController) {
-                    Text("Mouse and keyboard emulation").tag(false)
-                    Text("Factorio native controls").tag(true)
+                    Text("Standard").tag(false)
+                    Text("Native gamepad").tag(true)
                 }
                 .pickerStyle(.menu)
                 .labelsHidden()
                 .focusable(false)
             }
+            Text(nativeController
+                ? "Use Factorio's gamepad interface and analog movement. Touch controls are unavailable."
+                : "Use touch controls, a keyboard and mouse, or a gamepad.")
+                .foregroundStyle(.secondary)
             if let active = activeNativeController {
-                Text("This launch: \(active ? "Factorio native controls" : "Mouse and keyboard emulation")")
+                Text("This launch: \(active ? "Native gamepad" : "Standard")")
                     .foregroundStyle(.secondary)
                 if nativeController != active {
                     Text("Save your game, then close and reopen the app to apply this change.")
@@ -116,16 +120,17 @@ struct FactorioControlsView: View {
                     if !gamepadConnected {
                         VStack(alignment: .leading, spacing: 8) {
                             if nativeControllerActive {
-                                Text("For touch gameplay, save and restart the app with Mouse and keyboard emulation selected.")
+                                Text("For touch gameplay, save and restart the app with Standard selected.")
                                     .foregroundStyle(.orange)
                             }
-                            Text("Touch gameplay uses Mouse and keyboard emulation. Tap the hand button to show or hide the default layout.")
-                            Text("Use Menus to tap game windows directly. Choose Play for the movement pad and action buttons. Drag on the game to aim. Items keeps your current touch mode.")
-                            Text("Hold and drag Build, Mine, or Fire to aim while acting. Release to stop. Pinch to zoom in Play mode.")
-                            Text("Tap Menus or Play above the movement pad to switch modes.")
+                            Text("Touch gameplay uses Standard controls. Tap the hand button to show or hide the default layout.")
+                            Text("Turn Pad on for the movement pad and action buttons. Drag on the game to aim. Turn Pad off to tap the game directly. Items keeps your current touch mode.")
+                            Text("Hold and drag Build, Mine, or Fire to aim while acting. Release to stop. Pinch to zoom with Pad on.")
+                            Text("Tap the Pad button above the movement pad to turn it on or off. The button stays highlighted while Pad is on.")
                             Text("Tools opens a compact panel beside your right thumb. Choose Build, Items, or World for actions.")
                             Text("Choose App in Tools for the keyboard, control guide, and hide control. After hiding the controls, tap the hand button near your left thumb to show them again.")
                             Text("In Tools → Items, choose Move stack or Move all, then tap an item. Move all transfers every item of that type. An empty slot transfers all items. Tap the action label to cancel.")
+                            Text("In Tools → Items, tap Drop one to place one held item at the current cursor position. Hold to keep dropping. Release to stop.")
                             Text("These controls use Factorio's default keyboard bindings. Custom bindings in Factorio can change their actions.")
                         }
                         .foregroundStyle(.secondary)
@@ -133,7 +138,7 @@ struct FactorioControlsView: View {
                         FactorioControllerModePicker(activeNativeController: nativeControllerActive)
                         Text("Factorio handles your controller directly, with analog movement and its controller interface.")
                             .foregroundStyle(.secondary)
-                        Text("The hand button and touch gameplay overlay are unavailable in this mode. Use Mouse and keyboard emulation for touch gameplay.")
+                        Text("The hand button and touch gameplay overlay are unavailable in this mode. Use Standard for touch gameplay.")
                             .foregroundStyle(.secondary)
                         Text("Connect a controller before starting the game. Open Settings → Controls in Factorio to select controller input or change its bindings.")
                             .foregroundStyle(.secondary)
