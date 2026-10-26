@@ -44,8 +44,12 @@ private func testControls(_ controls: FactorioTouchControlsView) {
             "Missing action symbol: \(button.accessibilityIdentifier!)")
     }
     let groups = all.compactMap { $0 as? UISegmentedControl }.first { $0.accessibilityLabel == "Tool group" }!
-    let compactMode = all.compactMap { $0 as? UIButton }.first { $0.accessibilityLabel == "Touch mode: Menus" }!
-    assert(!all.contains { $0.accessibilityLabel == "Touch mode" || $0.accessibilityLabel == "Expand control bar" },
+    let padToggle = all.compactMap { $0 as? UIButton }.first { $0.accessibilityIdentifier == "pad-toggle" }!
+    let cancelTransfer = all.compactMap { $0 as? UIButton }.first { $0.accessibilityIdentifier == "transfer-cancel" }!
+    assert(padToggle.configuration?.title == "Pad" && padToggle.configuration?.image != nil)
+    assert(!padToggle.isSelected && padToggle.accessibilityValue == "Off" && visible(padToggle) && !visible(cancelTransfer))
+    assert(padToggle.bounds.size == CGSize(width: 80, height: 44))
+    assert(!all.contains { $0.accessibilityLabel == "Expand control bar" },
         "The top bar and its expand control must be removed")
     func button(_ action: FactorioTouchAction) -> UIButton {
         all.compactMap { $0 as? UIButton }.first { $0.accessibilityIdentifier == "touch-" + action.rawValue && visible($0) }!
@@ -61,8 +65,15 @@ private func testControls(_ controls: FactorioTouchControlsView) {
     assert(!controls.precision && !visible(all.first { $0.accessibilityIdentifier == "touch-build" }!))
     assert(controls.hitTest(CGPoint(x: controls.bounds.midX, y: 24), with: nil) == nil,
         "The top of the game must receive touches without an overlay bar")
-    compactMode.sendActions(for: .touchUpInside)
-    assert(controls.precision, "The compact mode button must switch modes in one tap")
+    padToggle.sendActions(for: .touchUpInside)
+    assert(controls.precision && padToggle.isSelected && padToggle.accessibilityValue == "On",
+        "Pad must toggle on and report its state in one tap")
+    let activePadImage = padToggle.configuration!.image!
+    padToggle.sendActions(for: .touchUpInside)
+    assert(!controls.precision && !padToggle.isSelected && padToggle.accessibilityValue == "Off")
+    assert(padToggle.configuration?.title == "Pad" && padToggle.configuration?.image != activePadImage,
+        "Pad must keep its label and change its icon between on and off")
+    padToggle.sendActions(for: .touchUpInside)
     controls.layoutIfNeeded()
     let pad = all.first { $0.accessibilityLabel == "Movement pad" }!
     let padTouch = TestTouch()
@@ -101,22 +112,53 @@ private func testControls(_ controls: FactorioTouchControlsView) {
     controls.layoutIfNeeded()
     assert(!all.contains { $0.accessibilityIdentifier == "touch-keyboard" && visible($0) },
         "Keyboard belongs only in the App tab")
+    let drop = button(.drop)
+    assert(drop.bounds.width >= 44 && drop.bounds.height >= 44)
+    let beforeDrop = actions.count
+    drop.sendActions(for: .touchDown)
+    assert(actions.count == beforeDrop + 1 && actions.last!.0 == .drop && actions.last!.1)
+    assert(controls.precision && controls.targetAction == nil && visible(groups),
+        "Tools must stay open so Drop one can stay held")
+    drop.sendActions(for: .touchDown)
+    assert(actions.count == beforeDrop + 1, "Holding Drop one must keep a single key press active")
+    drop.sendActions(for: .touchUpInside)
+    assert(actions.count == beforeDrop + 2 && actions.last!.0 == .drop && !actions.last!.1)
+    for release in [UIControl.Event.touchUpOutside, .touchCancel] {
+        drop.sendActions(for: .touchDown)
+        drop.sendActions(for: release)
+        assert(actions.last!.0 == .drop && !actions.last!.1, "Lifting outside or cancelling must stop dropping")
+    }
+    drop.sendActions(for: .touchDown)
+    groups.selectedSegmentIndex = 0
+    groups.sendActions(for: .valueChanged)
+    assert(actions.last!.0 == .drop && !actions.last!.1, "Changing tool groups must stop dropping")
+    groups.selectedSegmentIndex = 1
+    groups.sendActions(for: .valueChanged)
+    drop.sendActions(for: .touchDown)
+    controls.reset()
+    assert(actions.last!.0 == .drop && !actions.last!.1, "Suspension must stop dropping")
+    button(.more).sendActions(for: .touchUpInside)
     button(.transferStack).sendActions(for: .touchUpInside)
     assert(!controls.precision && !visible(groups) && controls.targetAction == .transferStack)
-    assert(compactMode.currentTitle == "Move stack\nTap item" && compactMode.accessibilityLabel == "Cancel Move stack")
+    assert(cancelTransfer.currentTitle == "Move stack\nTap item or cancel" && cancelTransfer.accessibilityLabel == "Cancel Move stack")
+    assert(visible(padToggle) && !padToggle.isSelected && visible(cancelTransfer))
+    assert(!padToggle.frame.intersects(cancelTransfer.frame), "The Pad toggle and transfer prompt must stay separate")
     controls.clearTargetAction()
-    assert(controls.targetAction == nil && compactMode.currentTitle == "Menus")
+    assert(controls.targetAction == nil && !padToggle.isSelected && !visible(cancelTransfer))
     button(.more).sendActions(for: .touchUpInside)
     button(.transferAll).sendActions(for: .touchUpInside)
     assert(controls.targetAction == .transferAll)
-    compactMode.sendActions(for: .touchUpInside)
+    cancelTransfer.sendActions(for: .touchUpInside)
     assert(controls.targetAction == nil && !controls.precision, "Cancel must clear the target without switching modes")
     button(.inventory).sendActions(for: .touchUpInside)
-    assert(!controls.precision && !visible(build), "Items must preserve Menus mode")
-    compactMode.sendActions(for: .touchUpInside)
+    assert(!controls.precision && !visible(build), "Items must keep Pad off")
+    button(.more).sendActions(for: .touchUpInside)
+    button(.transferAll).sendActions(for: .touchUpInside)
+    padToggle.sendActions(for: .touchUpInside)
+    assert(controls.targetAction == nil && !visible(cancelTransfer), "Changing modes must cancel the pending transfer")
     for _ in 0..<2 {
         button(.inventory).sendActions(for: .touchUpInside)
-        assert(controls.precision && visible(build), "Opening or closing Items must preserve Play mode")
+        assert(controls.precision && visible(build), "Opening or closing Items must keep Pad on")
         assert(actions.last!.0 == .inventory && actions.last!.1)
     }
     build.sendActions(for: .touchDown)
@@ -183,7 +225,7 @@ private final class PreviewController: UIViewController {
         testKeyboard()
         testControls(controls)
         let all = descendants(controls)
-        let mode = all.compactMap { $0 as? UIButton }.first { $0.accessibilityLabel?.hasPrefix("Touch mode:") == true }!
+        let mode = all.compactMap { $0 as? UIButton }.first { $0.accessibilityIdentifier == "pad-toggle" }!
         if controls.precision != !CommandLine.arguments.contains("--menus") { mode.sendActions(for: .touchUpInside) }
         let groups = all.compactMap { $0 as? UISegmentedControl }.first { $0.accessibilityLabel == "Tool group" }!
         groups.selectedSegmentIndex = CommandLine.arguments.contains("--app") ? 3 : (CommandLine.arguments.contains("--items") ? 1 : 0)
