@@ -29,13 +29,19 @@ for bundle in [app, *sorted((app / "Frameworks").glob("*.framework"))]:
 assert (app / "Frameworks/FactorioCompat.framework/FactorioCompat").is_file()
 assert (app / "Frameworks/FactorioGuest.framework/FactorioGuest").is_file()
 assert (app / "FactorioData/base/info.json").is_file()
-# Require FactorioCompat to provide modff, matching Factorio 2.0.7.
-probe = app.parent / "modff-probe.c"
-probe.write_text("float modff(float, float *);\nfloat probe(float x, float *integer) { return modff(x, integer); }\n")
+# Require imports used by Factorio 2.0.7 and 2.1.24 to resolve through FactorioCompat.
+probe = app.parent / "compat-imports-probe.c"
+probe.write_text(
+    "float modff(float, float *);\n"
+    "float probe(float x, float *integer) { return modff(x, integer); }\n"
+    "extern void *NSApplicationDidChangeScreenParametersNotification;\n"
+    "void *screen_notification(void) { return NSApplicationDidChangeScreenParametersNotification; }\n"
+)
 sdk = subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-path"], text=True).strip()
 subprocess.run(["xcrun", "clang", "-target", "arm64-apple-ios17.0", "-isysroot", sdk,
     "-dynamiclib", "-nostdlib", "-fno-builtin", "-F", str(app / "Frameworks"),
     "-framework", "FactorioCompat", str(probe), "-o", str(probe.with_suffix(".dylib"))], check=True)
 print("The app and embedded frameworks target iOS 17 or earlier.")
 print("Older guests can resolve modff through FactorioCompat.")
+print("Factorio 2.1.24 can resolve the screen parameters notification through FactorioCompat.")
 PY

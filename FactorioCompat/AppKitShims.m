@@ -46,6 +46,7 @@ __attribute__((visibility("default"))) \
 NSString *name = @#name;
 
 
+EXPORT_NOTIFICATION(NSApplicationDidChangeScreenParametersNotification)
 EXPORT_NOTIFICATION(NSWindowDidBecomeKeyNotification)
 EXPORT_NOTIFICATION(NSWindowDidChangeBackingPropertiesNotification)
 EXPORT_NOTIFICATION(NSWindowDidChangeScreenNotification)
