@@ -182,6 +182,13 @@ static FPSDLSendKeyboardKeyFn
 static FPSDLSetModStateFn
     gSetModState = NULL;
 
+// SDL 3 changed event layouts, text ownership, and the internal input signatures.
+static bool (*gSendKeyboardKey3)(uint64_t timestamp, uint32_t keyboardID, int rawcode, int32_t scancode, bool down);
+static void (*gSendKeyboardText3)(const char *text);
+static void (*gSendMouseMotion3)(uint64_t timestamp, void *window, uint32_t mouseID, bool relative, float x, float y);
+static void (*gSendMouseButton3)(uint64_t timestamp, void *window, uint32_t mouseID, uint8_t button, bool down);
+static void (*gSendMouseWheel3)(uint64_t timestamp, void *window, uint32_t mouseID, float x, float y, int direction);
+
 static void (*gSetKeyboardFocus)(void *window);
 static void *(*gGetWindowFromID)(uint32_t windowID);
 static void (*gLockJoysticks)(void);
@@ -234,6 +241,17 @@ FPKeyboardTimestamp(void)
     }
 
     return 0;
+}
+
+static BOOL FPHasInput(void)
+{
+    return gPushEvent || gSendKeyboardKey3;
+}
+
+static void FPSendKeyboardKey3(int32_t scancode, bool down, uint16_t modifiers)
+{
+    gSetModState(modifiers);
+    gSendKeyboardKey3(0, 0, 0, scancode, down);
 }
 
 
@@ -309,9 +327,10 @@ FactorioKeyboardBridgeSetGuestHandle(
 )
 {
     @synchronized (FPInputLock()) {
+        BOOL sdl3 = handle && dlsym(handle, "SDL_GetPrimaryDisplay");
         gPushEvent =
             (FPSDLPushEventFn)
-            (handle ? dlsym(
+            (handle && !sdl3 ? dlsym(
                 handle,
                 "SDL_PushEvent"
             ) : NULL);
@@ -332,14 +351,14 @@ FactorioKeyboardBridgeSetGuestHandle(
 
         gGetTicks =
             (FPSDLGetTicksFn)
-            (handle ? dlsym(
+            (handle && !sdl3 ? dlsym(
                 handle,
                 "SDL_GetTicks"
             ) : NULL);
 
         gSendKeyboardKey =
             (FPSDLSendKeyboardKeyFn)
-            (handle ? dlsym(
+            (handle && !sdl3 ? dlsym(
                 handle,
                 "SDL_SendKeyboardKey"
             ) : NULL);
@@ -350,6 +369,12 @@ FactorioKeyboardBridgeSetGuestHandle(
                 handle,
                 "SDL_SetModState"
             ) : NULL);
+        void *sdl3Handle = sdl3 ? handle : NULL;
+        gSendKeyboardKey3 = sdl3Handle ? dlsym(sdl3Handle, "SDL_SendKeyboardKey") : NULL;
+        gSendKeyboardText3 = sdl3Handle ? dlsym(sdl3Handle, "SDL_SendKeyboardText") : NULL;
+        gSendMouseMotion3 = sdl3Handle ? dlsym(sdl3Handle, "SDL_SendMouseMotion") : NULL;
+        gSendMouseButton3 = sdl3Handle ? dlsym(sdl3Handle, "SDL_SendMouseButton") : NULL;
+        gSendMouseWheel3 = sdl3Handle ? dlsym(sdl3Handle, "SDL_SendMouseWheel") : NULL;
         void *nativeHandle = nativeController ? handle : NULL;
         gSetKeyboardFocus = nativeHandle ? dlsym(nativeHandle, "SDL_SetKeyboardFocus") : NULL;
         gGetWindowFromID = nativeHandle ? dlsym(nativeHandle, "SDL_GetWindowFromID") : NULL;
@@ -362,7 +387,10 @@ FactorioKeyboardBridgeSetGuestHandle(
         gSetHintWithPriority = nativeHandle ? dlsym(nativeHandle, "SDL_SetHintWithPriority") : NULL;
         BOOL nativeReady = gSetKeyboardFocus && gGetWindowFromID && gLockJoysticks && gUnlockJoysticks &&
             gNumJoysticks && gJoystickGetDeviceInstanceID && gJoystickFromInstanceID && gRecenterJoystick && gSetHintWithPriority;
-        BOOL ready = gPushEvent && gGetKeyboardFocus && gGetWindowID && gGetTicks && gSendKeyboardKey && gSetModState &&
+        BOOL inputReady = sdl3
+            ? gSendKeyboardKey3 && gSendKeyboardText3 && gSendMouseMotion3 && gSendMouseButton3 && gSendMouseWheel3
+            : gPushEvent && gGetTicks && gSendKeyboardKey;
+        BOOL ready = inputReady && gGetKeyboardFocus && gGetWindowID && gSetModState &&
             (!nativeController || nativeReady);
         if (ready && nativeController) {
             // Focus loss must block native input even if Factorio requests background events.
@@ -374,6 +402,11 @@ FactorioKeyboardBridgeSetGuestHandle(
             gSendKeyboardKey = NULL;
             gSetModState = NULL;
             gSetKeyboardFocus = NULL;
+            gSendKeyboardKey3 = NULL;
+            gSendKeyboardText3 = NULL;
+            gSendMouseMotion3 = NULL;
+            gSendMouseButton3 = NULL;
+            gSendMouseWheel3 = NULL;
             if (handle) NSLog(@"[FactorioPad] The guest is missing required SDL input functions.");
         }
         gSuspendedWindowID = 0;
@@ -423,8 +456,14 @@ FactorioKeyboardInsertText(
     @synchronized (FPInputLock()) {
         if (!text ||
             text.length == 0 ||
-            !gPushEvent) {
+            !FPHasInput()) {
 
+            return;
+        }
+
+        if (gSendKeyboardText3) {
+            // SDL copies the UTF-8 string into memory owned by its event queue.
+            gSendKeyboardText3(text.UTF8String);
             return;
         }
 
@@ -495,7 +534,14 @@ FPPushKeyWithMod(
     FPUint16 mod
 )
 {
-    if (!gPushEvent) {
+    if (!FPHasInput()) {
+        return;
+    }
+
+    if (gSendKeyboardKey3) {
+        FPSendKeyboardKey3(scancode, true, mod);
+        FPSendKeyboardKey3(scancode, false, mod);
+        gSetModState(gSyntheticModifiers | gPhysicalModifiers | gTouchModifiers);
         return;
     }
 
@@ -653,6 +699,12 @@ FPPushKeyboardState(
     FPUint8 state
 )
 {
+    if (gSendKeyboardKey3) {
+        FPSendKeyboardKey3(scancode, state == FP_SDL_PRESSED,
+            gSyntheticModifiers | gPhysicalModifiers | gTouchModifiers);
+        return;
+    }
+
     /*
      * Prefer the internal SDL path,
      * because it also updates SDL_GetKeyboardState().
@@ -776,7 +828,12 @@ FactorioMouseMove(
 )
 {
     @synchronized (FPInputLock()) {
-        if (!gPushEvent) {
+        if (!FPHasInput()) {
+            return;
+        }
+
+        if (gSendMouseMotion3) {
+            gSendMouseMotion3(0, gGetKeyboardFocus(), 0, false, x, y);
             return;
         }
 
@@ -825,7 +882,7 @@ FPSetMouseButton(
 {
     @synchronized (FPInputLock()) {
         if (button < 1 || button > 32) return;
-        if (!gPushEvent) {
+        if (!FPHasInput()) {
             return;
         }
 
@@ -834,6 +891,13 @@ FPSetMouseButton(
         if (pressed) *source |= mask; else *source &= ~mask;
         BOOL isPressed = ((gSyntheticMouseButtons | gTouchMouseButtons) & mask) != 0;
         if (wasPressed == isPressed) return;
+
+        if (gSendMouseButton3) {
+            void *window = gGetKeyboardFocus();
+            gSendMouseMotion3(0, window, 0, false, x, y);
+            gSendMouseButton3(0, window, 0, button, pressed);
+            return;
+        }
 
         FPSDLEvent event;
         memset(
@@ -891,7 +955,12 @@ FactorioMouseWheel(
 )
 {
     @synchronized (FPInputLock()) {
-        if (!gPushEvent) {
+        if (!FPHasInput()) {
+            return;
+        }
+
+        if (gSendMouseWheel3) {
+            gSendMouseWheel3(0, gGetKeyboardFocus(), 0, x, y, 0);
             return;
         }
 

@@ -1,6 +1,7 @@
 #import "FactorioLoader.h"
 
 #import "FactorioControllerBridge.h"
+#import "FactorioVideoBridge.h"
 #import "FactorioKeyboardBridge.h"
 
 #import <Foundation/Foundation.h>
@@ -851,6 +852,11 @@ static void *FactorioOpenFramework(NSString *name, int flags)
         return;
     }
 
+    FactorioLog(@"Preparing video");
+    if (!FactorioVideoBridgeSetGuestHandle(guest)) {
+        FactorioReportError(@"Factorio cannot initialize its video driver.");
+        return;
+    }
     FactorioLog(@"Preparing input");
     if (!FactorioKeyboardBridgeSetGuestHandle(guest, FactorioNativeController)) {
         FactorioReportError(FactorioNativeController

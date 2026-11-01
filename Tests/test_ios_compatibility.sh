@@ -36,12 +36,22 @@ probe.write_text(
     "float probe(float x, float *integer) { return modff(x, integer); }\n"
     "extern void *NSApplicationDidChangeScreenParametersNotification;\n"
     "void *screen_notification(void) { return NSApplicationDidChangeScreenParametersNotification; }\n"
+    "extern void *NSCalibratedRGBColorSpace;\n"
+    "void *calibrated_rgb_color_space(void) { return NSCalibratedRGBColorSpace; }\n"
 )
 sdk = subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-path"], text=True).strip()
+desktop_probe = app.parent / "desktop-imports-probe.s"
+desktop_probe.write_text(".section __DATA,__data\n.p2align 3\n" + "".join(".quad " + symbol + "\n" for symbol in [
+    "_CGDisplayRegisterReconfigurationCallback", "_CGDisplayRemoveReconfigurationCallback",
+    "_NSWindowDidChangeOcclusionStateNotification", "_NSWindowDidEndLiveResizeNotification",
+    "_NSWindowWillMiniaturizeNotification", "_NSWindowWillMoveNotification", "_NSWindowWillStartLiveResizeNotification",
+    "_OBJC_CLASS_$_NSOpenPanel", "_OBJC_CLASS_$_NSSavePanel", "_OBJC_CLASS_$_NSPasteboardItem",
+    "_OBJC_CLASS_$_NSStatusBar", "_OBJC_CLASS_$_NSTrackingArea",
+]))
 subprocess.run(["xcrun", "clang", "-target", "arm64-apple-ios17.0", "-isysroot", sdk,
     "-dynamiclib", "-nostdlib", "-fno-builtin", "-F", str(app / "Frameworks"),
-    "-framework", "FactorioCompat", str(probe), "-o", str(probe.with_suffix(".dylib"))], check=True)
+    "-framework", "FactorioCompat", str(probe), str(desktop_probe), "-o", str(probe.with_suffix(".dylib"))], check=True)
 print("The app and embedded frameworks target iOS 17 or earlier.")
 print("Older guests can resolve modff through FactorioCompat.")
-print("Factorio 2.1.24 can resolve the screen parameters notification through FactorioCompat.")
+print("Factorio 2.1.24 can resolve the screen notification and calibrated RGB color space through FactorioCompat.")
 PY
