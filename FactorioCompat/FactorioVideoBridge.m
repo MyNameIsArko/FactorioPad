@@ -5,12 +5,10 @@
 @implementation FactorioAppearance
 - (NSString *)name
 {
-    // FactorioPad always presents its interface in dark mode.
     return @"NSAppearanceNameDarkAqua";
 }
 @end
 
-// SDL 3 exports this prefix of VideoBootStrap as COCOA_bootstrap.
 typedef struct {
     const char *name;
     const char *description;

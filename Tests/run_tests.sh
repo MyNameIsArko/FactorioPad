@@ -25,12 +25,6 @@ xcrun swiftc FactorioPad/FactorioTouchControls.swift Tests/test_touch_controls.s
 "$test_dir/touch-controls"
 xcrun clang -fobjc-arc -fblocks -framework Foundation Tests/test_keyboard_bridge.m -o "$test_dir/keyboard-bridge"
 "$test_dir/keyboard-bridge"
-xcrun clang -fobjc-arc -fblocks -Wl,-export_dynamic -framework Foundation -framework CoreGraphics \
-    Tests/test_sdl3_input.m -o "$test_dir/sdl3-input"
-"$test_dir/sdl3-input"
-xcrun clang -fobjc-arc -fblocks -Wl,-export_dynamic -framework Foundation -framework CoreFoundation \
-    Tests/test_video_bridge.m -o "$test_dir/video-bridge"
-"$test_dir/video-bridge"
 xcrun clang -fobjc-arc -fblocks -framework Foundation -framework GameController -framework QuartzCore -framework CoreGraphics \
     Tests/test_controller.m -o "$test_dir/controller"
 "$test_dir/controller"

@@ -818,7 +818,6 @@ static id FactorioCompatCreateMenu(NSString *name)
     if (wantsLayer && !_fpLayer) {
         _fpLayer = [self makeBackingLayer];
         if ([_fpLayer isKindOfClass:CAMetalLayer.class]) {
-            // SDL 2 and SDL 3 must use the host's iPad presentation behavior.
             CAMetalLayer *hostLayer = [FactorioMetalHost hostMetalLayer];
             if (hostLayer) { _fpLayer = hostLayer; }
         }

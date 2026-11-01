@@ -648,7 +648,6 @@ CGDisplayModeRelease(
 
 typedef void (*FPDisplayReconfigurationCallBack)(FPDisplayID display, uint32_t flags, void *userInfo);
 
-// The single virtual display never reconfigures; UIKit owns display changes.
 EXPORT FPCGError CGDisplayRegisterReconfigurationCallback(FPDisplayReconfigurationCallBack callback, void *userInfo)
 {
     (void)callback;

@@ -182,7 +182,6 @@ static FPSDLSendKeyboardKeyFn
 static FPSDLSetModStateFn
     gSetModState = NULL;
 
-// SDL 3 changed event layouts, text ownership, and the internal input signatures.
 static bool (*gSendKeyboardKey3)(uint64_t timestamp, uint32_t keyboardID, int rawcode, int32_t scancode, bool down);
 static void (*gSendKeyboardText3)(const char *text);
 static void (*gSendMouseMotion3)(uint64_t timestamp, void *window, uint32_t mouseID, bool relative, float x, float y);
@@ -198,6 +197,11 @@ static int32_t (*gJoystickGetDeviceInstanceID)(int index);
 static void *(*gJoystickFromInstanceID)(int32_t instanceID);
 static void (*gRecenterJoystick)(void *joystick);
 static int (*gSetHintWithPriority)(const char *name, const char *value, int priority);
+static bool (*gSetKeyboardFocus3)(void *window);
+static uint32_t *(*gGetJoysticks3)(int *count);
+static void *(*gGetJoystickFromID3)(uint32_t instanceID);
+static void (*gFree3)(void *memory);
+static bool (*gSetHintWithPriority3)(const char *name, const char *value, int priority);
 static uint32_t gSuspendedWindowID;
 
 static FPUint16
@@ -252,6 +256,13 @@ static void FPSendKeyboardKey3(int32_t scancode, bool down, uint16_t modifiers)
 {
     gSetModState(modifiers);
     gSendKeyboardKey3(0, 0, 0, scancode, down);
+}
+
+static BOOL FPSetKeyboardFocus(void *window)
+{
+    if (gSetKeyboardFocus3) return gSetKeyboardFocus3(window);
+    gSetKeyboardFocus(window);
+    return YES;
 }
 
 
@@ -376,17 +387,26 @@ FactorioKeyboardBridgeSetGuestHandle(
         gSendMouseButton3 = sdl3Handle ? dlsym(sdl3Handle, "SDL_SendMouseButton") : NULL;
         gSendMouseWheel3 = sdl3Handle ? dlsym(sdl3Handle, "SDL_SendMouseWheel") : NULL;
         void *nativeHandle = nativeController ? handle : NULL;
-        gSetKeyboardFocus = nativeHandle ? dlsym(nativeHandle, "SDL_SetKeyboardFocus") : NULL;
+        void *native2 = sdl3 ? NULL : nativeHandle;
+        void *native3 = sdl3 ? nativeHandle : NULL;
+        gSetKeyboardFocus = native2 ? dlsym(native2, "SDL_SetKeyboardFocus") : NULL;
         gGetWindowFromID = nativeHandle ? dlsym(nativeHandle, "SDL_GetWindowFromID") : NULL;
         gLockJoysticks = nativeHandle ? dlsym(nativeHandle, "SDL_LockJoysticks") : NULL;
         gUnlockJoysticks = nativeHandle ? dlsym(nativeHandle, "SDL_UnlockJoysticks") : NULL;
-        gNumJoysticks = nativeHandle ? dlsym(nativeHandle, "SDL_NumJoysticks") : NULL;
-        gJoystickGetDeviceInstanceID = nativeHandle ? dlsym(nativeHandle, "SDL_JoystickGetDeviceInstanceID") : NULL;
-        gJoystickFromInstanceID = nativeHandle ? dlsym(nativeHandle, "SDL_JoystickFromInstanceID") : NULL;
+        gNumJoysticks = native2 ? dlsym(native2, "SDL_NumJoysticks") : NULL;
+        gJoystickGetDeviceInstanceID = native2 ? dlsym(native2, "SDL_JoystickGetDeviceInstanceID") : NULL;
+        gJoystickFromInstanceID = native2 ? dlsym(native2, "SDL_JoystickFromInstanceID") : NULL;
         gRecenterJoystick = nativeHandle ? dlsym(nativeHandle, "SDL_PrivateJoystickForceRecentering") : NULL;
-        gSetHintWithPriority = nativeHandle ? dlsym(nativeHandle, "SDL_SetHintWithPriority") : NULL;
-        BOOL nativeReady = gSetKeyboardFocus && gGetWindowFromID && gLockJoysticks && gUnlockJoysticks &&
-            gNumJoysticks && gJoystickGetDeviceInstanceID && gJoystickFromInstanceID && gRecenterJoystick && gSetHintWithPriority;
+        gSetHintWithPriority = native2 ? dlsym(native2, "SDL_SetHintWithPriority") : NULL;
+        gSetKeyboardFocus3 = native3 ? dlsym(native3, "SDL_SetKeyboardFocus") : NULL;
+        gGetJoysticks3 = native3 ? dlsym(native3, "SDL_GetJoysticks") : NULL;
+        gGetJoystickFromID3 = native3 ? dlsym(native3, "SDL_GetJoystickFromID") : NULL;
+        gFree3 = native3 ? dlsym(native3, "SDL_free") : NULL;
+        gSetHintWithPriority3 = native3 ? dlsym(native3, "SDL_SetHintWithPriority") : NULL;
+        BOOL joystickReady = sdl3
+            ? gSetKeyboardFocus3 && gGetJoysticks3 && gGetJoystickFromID3 && gFree3 && gSetHintWithPriority3
+            : gSetKeyboardFocus && gNumJoysticks && gJoystickGetDeviceInstanceID && gJoystickFromInstanceID && gSetHintWithPriority;
+        BOOL nativeReady = joystickReady && gGetWindowFromID && gLockJoysticks && gUnlockJoysticks && gRecenterJoystick;
         BOOL inputReady = sdl3
             ? gSendKeyboardKey3 && gSendKeyboardText3 && gSendMouseMotion3 && gSendMouseButton3 && gSendMouseWheel3
             : gPushEvent && gGetTicks && gSendKeyboardKey;
@@ -394,7 +414,9 @@ FactorioKeyboardBridgeSetGuestHandle(
             (!nativeController || nativeReady);
         if (ready && nativeController) {
             // Focus loss must block native input even if Factorio requests background events.
-            ready = gSetHintWithPriority("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "0", 2) != 0;
+            ready = sdl3
+                ? gSetHintWithPriority3("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "0", 2)
+                : gSetHintWithPriority("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "0", 2) != 0;
         }
         if (!ready) {
             // Do not leave a partially initialized bridge available to other input sources.
@@ -402,6 +424,7 @@ FactorioKeyboardBridgeSetGuestHandle(
             gSendKeyboardKey = NULL;
             gSetModState = NULL;
             gSetKeyboardFocus = NULL;
+            gSetKeyboardFocus3 = NULL;
             gSendKeyboardKey3 = NULL;
             gSendKeyboardText3 = NULL;
             gSendMouseMotion3 = NULL;
@@ -423,24 +446,39 @@ FactorioKeyboardBridgeSetGuestHandle(
 void FactorioInputSetActive(BOOL active)
 {
     @synchronized (FPInputLock()) {
-        if (!gSetKeyboardFocus || (active && !gSuspendedWindowID)) return;
+        if ((!gSetKeyboardFocus && !gSetKeyboardFocus3) || (active && !gSuspendedWindowID)) return;
         gLockJoysticks();
         if (!active) {
             void *window = gGetKeyboardFocus();
             if (window) {
-                gSuspendedWindowID = gGetWindowID(window);
-                gSetKeyboardFocus(NULL);
+                uint32_t windowID = gGetWindowID(window);
+                if (!FPSetKeyboardFocus(NULL)) {
+                    gUnlockJoysticks();
+                    return;
+                }
+                gSuspendedWindowID = windowID;
                 // Focus loss blocks new presses; recentering also releases controls already held.
-                int count = gNumJoysticks();
-                for (int index = 0; index < count; index++) {
-                    void *joystick = gJoystickFromInstanceID(gJoystickGetDeviceInstanceID(index));
-                    if (joystick) gRecenterJoystick(joystick);
+                if (gGetJoysticks3) {
+                    int count = 0;
+                    uint32_t *ids = gGetJoysticks3(&count);
+                    if (ids) {
+                        for (int index = 0; index < count; index++) {
+                            void *joystick = gGetJoystickFromID3(ids[index]);
+                            if (joystick) gRecenterJoystick(joystick);
+                        }
+                        gFree3(ids);
+                    }
+                } else {
+                    int count = gNumJoysticks();
+                    for (int index = 0; index < count; index++) {
+                        void *joystick = gJoystickFromInstanceID(gJoystickGetDeviceInstanceID(index));
+                        if (joystick) gRecenterJoystick(joystick);
+                    }
                 }
             }
         } else {
             void *window = gGetWindowFromID(gSuspendedWindowID);
-            gSuspendedWindowID = 0;
-            if (window && !gGetKeyboardFocus()) gSetKeyboardFocus(window);
+            if (!window || gGetKeyboardFocus() || FPSetKeyboardFocus(window)) gSuspendedWindowID = 0;
         }
         gUnlockJoysticks();
     }
@@ -462,7 +500,6 @@ FactorioKeyboardInsertText(
         }
 
         if (gSendKeyboardText3) {
-            // SDL copies the UTF-8 string into memory owned by its event queue.
             gSendKeyboardText3(text.UTF8String);
             return;
         }
