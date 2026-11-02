@@ -646,6 +646,22 @@ CGDisplayModeRelease(
 
 #pragma mark - Display mode switching
 
+typedef void (*FPDisplayReconfigurationCallBack)(FPDisplayID display, uint32_t flags, void *userInfo);
+
+EXPORT FPCGError CGDisplayRegisterReconfigurationCallback(FPDisplayReconfigurationCallBack callback, void *userInfo)
+{
+    (void)callback;
+    (void)userInfo;
+    return FP_CG_SUCCESS;
+}
+
+EXPORT FPCGError CGDisplayRemoveReconfigurationCallback(FPDisplayReconfigurationCallBack callback, void *userInfo)
+{
+    (void)callback;
+    (void)userInfo;
+    return FP_CG_SUCCESS;
+}
+
 
 EXPORT
 FPCGError
