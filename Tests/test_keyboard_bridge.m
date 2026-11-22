@@ -23,6 +23,18 @@ static int captureEvent(FPSDLEvent *event)
     return 1;
 }
 
+static int cursorState;
+static int cursorQuery(int toggle)
+{
+    NSCAssert(toggle == -1, @"Cursor inspection must never enable or disable the SDL cursor");
+    return cursorState;
+}
+
+static bool cursorQuery3(void)
+{
+    return cursorState != 0;
+}
+
 static void expectTypedKey(NSString *text, int32_t scancode, int32_t keycode, uint16_t modifiers)
 {
     [events removeAllObjects];
@@ -47,6 +59,25 @@ static void expectTypedKey(NSString *text, int32_t scancode, int32_t keycode, ui
 int main(void)
 {
     @autoreleasepool {
+        NSCAssert(FactorioMouseCursorVisibility() == -1, @"Missing SDL cursor support must be unknown");
+        gShowCursor = cursorQuery;
+        for (NSNumber *state in @[@0, @1, @2, @(-1)]) {
+            cursorState = state.intValue;
+            int expected = cursorState == 0 || cursorState == 1 ? cursorState : -1;
+            NSCAssert(FactorioMouseCursorVisibility() == expected, @"Normalize unexpected SDL cursor results");
+            NSCAssert(cursorState == state.intValue, @"Querying must preserve the game's cursor state");
+        }
+        gShowCursor = NULL;
+        NSCAssert(FactorioMouseCursorVisibility() == -1, @"Unavailable cursor support must remain optional");
+        gCursorVisible3 = cursorQuery3;
+        for (NSNumber *state in @[@0, @1]) {
+            cursorState = state.intValue;
+            NSCAssert(FactorioMouseCursorVisibility() == cursorState, @"SDL 3 must query cursor visibility without SDL_ShowCursor");
+            NSCAssert(cursorState == state.intValue, @"SDL 3 cursor queries must preserve visibility");
+        }
+        void *missingGuest = NULL;
+        FactorioKeyboardBridgeSetGuestHandle(missingGuest, NO);
+        NSCAssert(FactorioMouseCursorVisibility() == -1, @"Resetting the bridge must clear the SDL 3 cursor query");
         receivedText = [NSMutableData data];
         keyTypes = [NSMutableArray array];
         events = [NSMutableArray array];

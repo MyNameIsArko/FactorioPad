@@ -30,6 +30,11 @@ final class FactorioSceneDelegate: UIResponder, UIWindowSceneDelegate {
         let window = UIWindow(windowScene: scene)
         window.rootViewController = FactorioRootController(rootView: FactorioLaunchView())
         window.makeKeyAndVisible()
+        FactorioLoader.logMessage(
+            "Scene window: \(Int(window.bounds.width))x\(Int(window.bounds.height)); " +
+            "screen: \(Int(scene.screen.bounds.width))x\(Int(scene.screen.bounds.height)); " +
+            "native: \(Int(scene.screen.nativeBounds.width))x\(Int(scene.screen.nativeBounds.height))"
+        )
         self.window = window
     }
 }
@@ -102,6 +107,9 @@ struct FactorioLaunchView: View {
                             Text(status ?? "Factorio stopped.")
                                 .multilineTextAlignment(.center)
                             FactorioControllerModePicker(activeNativeController: FactorioLoader.usesNativeController)
+                            if UIDevice.current.userInterfaceIdiom == .pad {
+                                cursorBehaviorNote
+                            }
                             if FactorioSaveSync.hasFolder {
                                 Button("Retry save sync") { Task { await syncAfterPlay() } }
                                     .buttonStyle(.borderedProminent)
@@ -109,6 +117,9 @@ struct FactorioLaunchView: View {
                             Button("Choose save folder") { selectsGameFolder = false; showsFolderPicker = true }
                         } else {
                             FactorioControllerModePicker()
+                            if UIDevice.current.userInterfaceIdiom == .pad {
+                                cursorBehaviorNote
+                            }
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack {
                                     Text("Graphics").font(.headline)
@@ -204,6 +215,13 @@ struct FactorioLaunchView: View {
         .alert("Factorio", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
             Button("OK") { message = nil }
         } message: { Text(message ?? "") }
+    }
+
+    private var cursorBehaviorNote: some View {
+        Text("Native mouse controls: the cursor stays locked on the iPad when no external display is connected. With a monitor connected, pointer lock is released; iPadOS controls movement between displays, and the Dock may appear.")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
     }
 
     private func importGame(from folder: URL?) async {
