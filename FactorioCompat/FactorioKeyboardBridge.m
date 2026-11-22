@@ -164,6 +164,7 @@ typedef FPUint32 (*FPSDLGetWindowIDFn)(
 typedef FPUint32 (*FPSDLGetTicksFn)(void);
 typedef int (*FPSDLShowCursorFn)(int toggle);
 static FPSDLShowCursorFn gShowCursor = NULL;
+static bool (*gCursorVisible3)(void);
 
 
 static FPSDLPushEventFn
@@ -383,8 +384,9 @@ FactorioKeyboardBridgeSetGuestHandle(
                 "SDL_SetModState"
             ) : NULL);
         // Optional: cursor queries must not prevent otherwise working input.
-        gShowCursor = (FPSDLShowCursorFn)(handle ? dlsym(handle, "SDL_ShowCursor") : NULL);
+        gShowCursor = (FPSDLShowCursorFn)(handle && !sdl3 ? dlsym(handle, "SDL_ShowCursor") : NULL);
         void *sdl3Handle = sdl3 ? handle : NULL;
+        gCursorVisible3 = sdl3Handle ? dlsym(sdl3Handle, "SDL_CursorVisible") : NULL;
         gSendKeyboardKey3 = sdl3Handle ? dlsym(sdl3Handle, "SDL_SendKeyboardKey") : NULL;
         gSendKeyboardText3 = sdl3Handle ? dlsym(sdl3Handle, "SDL_SendKeyboardText") : NULL;
         gSendMouseMotion3 = sdl3Handle ? dlsym(sdl3Handle, "SDL_SendMouseMotion") : NULL;
@@ -426,6 +428,7 @@ FactorioKeyboardBridgeSetGuestHandle(
             // Do not leave a partially initialized bridge available to other input sources.
             gPushEvent = NULL;
             gShowCursor = NULL;
+            gCursorVisible3 = NULL;
             gSendKeyboardKey = NULL;
             gSetModState = NULL;
             gSetKeyboardFocus = NULL;
@@ -451,6 +454,7 @@ FactorioKeyboardBridgeSetGuestHandle(
 int FactorioMouseCursorVisibility(void)
 {
     @synchronized (FPInputLock()) {
+        if (gCursorVisible3) { return gCursorVisible3() ? 1 : 0; }
         // SDL_QUERY (-1) reads the game's state without changing visibility,
         // cursor images, input method, or capture/relative mouse mode.
         if (!gShowCursor) { return -1; }

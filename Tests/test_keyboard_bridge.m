@@ -30,6 +30,11 @@ static int cursorQuery(int toggle)
     return cursorState;
 }
 
+static bool cursorQuery3(void)
+{
+    return cursorState != 0;
+}
+
 static void expectTypedKey(NSString *text, int32_t scancode, int32_t keycode, uint16_t modifiers)
 {
     [events removeAllObjects];
@@ -64,6 +69,15 @@ int main(void)
         }
         gShowCursor = NULL;
         NSCAssert(FactorioMouseCursorVisibility() == -1, @"Unavailable cursor support must remain optional");
+        gCursorVisible3 = cursorQuery3;
+        for (NSNumber *state in @[@0, @1]) {
+            cursorState = state.intValue;
+            NSCAssert(FactorioMouseCursorVisibility() == cursorState, @"SDL 3 must query cursor visibility without SDL_ShowCursor");
+            NSCAssert(cursorState == state.intValue, @"SDL 3 cursor queries must preserve visibility");
+        }
+        void *missingGuest = NULL;
+        FactorioKeyboardBridgeSetGuestHandle(missingGuest, NO);
+        NSCAssert(FactorioMouseCursorVisibility() == -1, @"Resetting the bridge must clear the SDL 3 cursor query");
         receivedText = [NSMutableData data];
         keyTypes = [NSMutableArray array];
         events = [NSMutableArray array];

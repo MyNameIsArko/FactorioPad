@@ -810,10 +810,8 @@ final class FactorioViewController: UIViewController {
         }
         let viewSize = view.bounds.size
         let screenSize = scene.screen.bounds.size
-        let viewIsLandscape = viewSize.width >= viewSize.height
-        let screenIsLandscape = screenSize.width >= screenSize.height
-        let geometryMatchesScreen = viewIsLandscape == screenIsLandscape
-        let ready = hasAppeared && geometryMatchesScreen
+        // A tall window on a landscape display still has a valid game viewport.
+        let ready = hasAppeared
 
         let geometry = "controller=\(Int(viewSize.width))x\(Int(viewSize.height)); " +
             "screen=\(Int(screenSize.width))x\(Int(screenSize.height)); " +

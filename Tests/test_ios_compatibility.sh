@@ -113,7 +113,7 @@ undefined_output = subprocess.check_output(
 undefined_symbols = {
     line.split()[-1]
     for line in undefined_output.splitlines()
-    if line.split() and line.split()[-1].startswith("_")
+    if line.split()
 }
 bound_symbols = {symbol for symbols in imports.values() for symbol in symbols}
 unassigned = sorted(undefined_symbols - bound_symbols)
